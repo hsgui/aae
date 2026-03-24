@@ -1,6 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, copyFile as cpFile, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 
 let _hasGh;
 
@@ -25,6 +26,10 @@ function getToken() {
     } catch { /* no token */ }
   }
   return null;
+}
+
+function useApi() {
+  return hasGh() || getToken();
 }
 
 async function api(endpoint, { raw = false } = {}) {
@@ -56,15 +61,54 @@ async function api(endpoint, { raw = false } = {}) {
   return raw ? await res.text() : await res.json();
 }
 
-/**
- * Download a single file via raw.githubusercontent.com (no API rate limit).
- */
-async function fetchRaw(owner, repo, filePath) {
-  const url = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${filePath}`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'aae-cli' } });
-  if (!res.ok) throw new Error(`Failed to download ${filePath}: ${res.status}`);
-  return await res.text();
+// ── Tarball-based download (zero API calls) ──────────────────────────
+
+async function withTarball(owner, repo, fn) {
+  const tmp = join(tmpdir(), `aae-${Date.now()}`);
+  await mkdir(tmp, { recursive: true });
+  try {
+    execSync(
+      `curl -fsSL "https://github.com/${owner}/${repo}/archive/HEAD.tar.gz" | tar xz -C "${tmp}" --strip-components=1`,
+      { stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 }
+    );
+    return await fn(tmp);
+  } finally {
+    await rm(tmp, { recursive: true, force: true }).catch(() => {});
+  }
 }
+
+async function copyRecursive(src, dest) {
+  const written = [];
+  let entries;
+  try {
+    entries = await readdir(src, { withFileTypes: true });
+  } catch {
+    return written;
+  }
+  for (const entry of entries) {
+    const s = join(src, entry.name);
+    const d = join(dest, entry.name);
+    if (entry.isDirectory()) {
+      await mkdir(d, { recursive: true });
+      written.push(...await copyRecursive(s, d));
+    } else {
+      await cpFile(s, d);
+      written.push(d);
+    }
+  }
+  return written;
+}
+
+async function listSubdirs(dir) {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    return entries.filter(e => e.isDirectory() && !e.name.startsWith('.')).map(e => e.name);
+  } catch {
+    return [];
+  }
+}
+
+// ── Public API ───────────────────────────────────────────────────────
 
 /**
  * Parse a GitHub source string into owner, repo, and subpath.
@@ -100,6 +144,13 @@ export function parseSource(source) {
  * Recursively download a directory from GitHub into a local destination.
  */
 export async function downloadDir(owner, repo, remotePath, destDir) {
+  if (!useApi()) {
+    return await withTarball(owner, repo, async (tmp) => {
+      await mkdir(destDir, { recursive: true });
+      return await copyRecursive(join(tmp, remotePath), destDir);
+    });
+  }
+
   const contents = await api(`repos/${owner}/${repo}/contents/${remotePath}`);
   const items = Array.isArray(contents) ? contents : [contents];
   const written = [];
@@ -115,9 +166,7 @@ export async function downloadDir(owner, repo, remotePath, destDir) {
       written.push(...sub);
     } else if (item.type === 'file') {
       await mkdir(dirname(localPath), { recursive: true });
-      const content = hasGh()
-        ? await api(`repos/${owner}/${repo}/contents/${item.path}`, { raw: true })
-        : await fetchRaw(owner, repo, item.path);
+      const content = await api(`repos/${owner}/${repo}/contents/${item.path}`, { raw: true });
       await writeFile(localPath, content, 'utf8');
       written.push(localPath);
     }
@@ -140,6 +189,12 @@ export async function discoverRemoteComponents(owner, repo, subpath) {
     }
 
     if (typeFromPath && parts.length === 1) {
+      if (!useApi()) {
+        return await withTarball(owner, repo, async (tmp) => {
+          const dirs = await listSubdirs(join(tmp, subpath));
+          return dirs.map(name => ({ type: typeFromPath, name, remotePath: `${subpath}/${name}` }));
+        });
+      }
       const contents = await api(`repos/${owner}/${repo}/contents/${subpath}`);
       if (!Array.isArray(contents)) return [];
       return contents
@@ -148,6 +203,20 @@ export async function discoverRemoteComponents(owner, repo, subpath) {
     }
 
     return [{ type: null, name: parts[parts.length - 1], remotePath: subpath }];
+  }
+
+  if (!useApi()) {
+    return await withTarball(owner, repo, async (tmp) => {
+      const components = [];
+      const rootDirs = await listSubdirs(tmp);
+      for (const dir of rootDirs.filter(d => KNOWN_TYPES.includes(d))) {
+        const children = await listSubdirs(join(tmp, dir));
+        for (const name of children) {
+          components.push({ type: dir, name, remotePath: `${dir}/${name}` });
+        }
+      }
+      return components;
+    });
   }
 
   const components = [];
