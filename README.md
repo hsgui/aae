@@ -5,23 +5,50 @@ Install and manage **skills**, **commands**, **agents**, **hooks**, and **workfl
 ## Quick Start
 
 ```bash
+# Install from GitHub — single command
+npx @hsgui/aae add owner/repo/skills/my-skill
+
+# Or clone the repo for local development
 git clone https://github.com/hsgui/aae.git && cd aae
 npm install   # auto-links all components to detected platforms
 npm link      # makes `aae` command available globally
+```
+
+## Install from GitHub
+
+Add components directly from any GitHub repo:
+
+```bash
+aae add owner/repo                           # all components from a repo
+aae add owner/repo/skills/my-skill           # a specific skill
+aae add owner/repo/commands/deploy           # a specific command
+aae add https://github.com/owner/repo        # full URL
+aae add https://github.com/.../tree/main/skills/my-skill   # URL with path
+```
+
+The `add` command downloads the component, saves it locally, and symlinks it to detected platforms — all in one step.
+
+Authentication is automatic if `gh` CLI is logged in, or set `GITHUB_TOKEN` env var.
+
+## Remove Components
+
+```bash
+aae remove skills my-skill                   # delete files and unlink
+aae remove commands deploy
 ```
 
 ## Usage
 
 ```bash
 aae targets                      # show detected platforms
-aae list                         # list all components
+aae list                         # list all local components
 aae list commands                # list only commands
 
 aae link                         # link everything to all platforms
 aae link --target claude         # link only to Claude Code
 aae link commands my-cmd         # link a specific command
 
-aae unlink commands my-cmd       # unlink a specific command
+aae unlink commands my-cmd       # unlink (keep files, remove symlink)
 ```
 
 ## Platform Mapping
@@ -40,9 +67,10 @@ Components are symlinked to the right location based on platform:
 
 ```
 aae/
-├── bin/aae.mjs            # CLI
+├── bin/aae.js             # CLI entry point
 ├── src/
 │   ├── index.mjs          # Public API
+│   ├── github.mjs         # GitHub API client (download, discover)
 │   ├── targets.mjs        # Platform detection & path mapping
 │   ├── registry.mjs       # Component discovery
 │   └── linker.mjs         # Symlink manager
@@ -53,39 +81,22 @@ aae/
 └── workflows/             # Workflow definitions (both platforms)
 ```
 
-## Adding Components
+## Creating Components
 
 Create a directory under the appropriate type folder:
 
 ```bash
-# Cursor skill
-skills/my-skill/SKILL.md
-
-# Claude slash command (namespace with .md files)
-commands/my-cmd/action.md
-
-# Agent (works on both platforms)
-agents/my-agent/manifest.json
+skills/my-skill/SKILL.md               # Cursor skill
+commands/my-cmd/action.md              # Claude slash command
+agents/my-agent/manifest.json          # Agent (both platforms)
 ```
 
 Metadata is read from `manifest.json`, `SKILL.md` frontmatter, or `README.md` heading.
 
-## Third-Party Packages
-
-Publish standalone npm packages following naming conventions:
-
-| Type       | npm package pattern       |
-|------------|---------------------------|
-| Skills     | `aae-skill-<name>`        |
-| Commands   | `aae-command-<name>`      |
-| Agents     | `aae-agent-<name>`        |
-| Hooks      | `aae-hook-<name>`         |
-| Workflows  | `aae-workflow-<name>`     |
-
 ## Programmatic API
 
 ```js
-import { listAll, linkComponent, detectTargets } from 'aae';
+import { listAll, linkComponent, detectTargets, downloadDir } from '@hsgui/aae';
 
 const targets = await detectTargets();  // ['cursor', 'claude']
 const components = await listAll();

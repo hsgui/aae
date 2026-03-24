@@ -1,14 +1,31 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
+import { execSync } from 'node:child_process';
 
 const GITHUB_API = 'https://api.github.com';
+
+let _cachedToken = undefined;
+
+function getGitHubToken() {
+  if (_cachedToken !== undefined) return _cachedToken;
+
+  _cachedToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '';
+  if (!_cachedToken) {
+    try {
+      _cachedToken = execSync('gh auth token 2>/dev/null', { encoding: 'utf8' }).trim();
+    } catch {
+      _cachedToken = '';
+    }
+  }
+  return _cachedToken;
+}
 
 function getHeaders() {
   const headers = {
     'Accept': 'application/vnd.github.v3+json',
     'User-Agent': 'aae-cli',
   };
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const token = getGitHubToken();
   if (token) headers['Authorization'] = `token ${token}`;
   return headers;
 }
