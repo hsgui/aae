@@ -2,16 +2,52 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 
-function gh(endpoint) {
-  const raw = execSync(`gh api "${endpoint}"`, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
-  return JSON.parse(raw);
+let _hasGh;
+
+function hasGh() {
+  if (_hasGh === undefined) {
+    try {
+      execSync('gh --version', { stdio: 'ignore' });
+      _hasGh = true;
+    } catch {
+      _hasGh = false;
+    }
+  }
+  return _hasGh;
 }
 
-function ghRaw(url) {
-  return execSync(`gh api "${url}" --header "Accept: application/vnd.github.raw"`, {
-    encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024,
-  });
+function getToken() {
+  if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
+  if (process.env.GH_TOKEN) return process.env.GH_TOKEN;
+  if (hasGh()) {
+    try {
+      return execSync('gh auth token', { encoding: 'utf8' }).trim();
+    } catch { /* no token */ }
+  }
+  return null;
+}
+
+async function api(endpoint, { raw = false } = {}) {
+  if (hasGh()) {
+    const headerArg = raw ? ' --header "Accept: application/vnd.github.raw"' : '';
+    const result = execSync(`gh api "${endpoint}"${headerArg}`, {
+      encoding: 'utf8',
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return raw ? result : JSON.parse(result);
+  }
+
+  const url = `https://api.github.com/${endpoint}`;
+  const headers = { 'User-Agent': 'aae-cli' };
+  const token = getToken();
+  if (token) headers['Authorization'] = `token ${token}`;
+  if (raw) headers['Accept'] = 'application/vnd.github.raw';
+
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    throw new Error(`GitHub API ${res.status}: ${res.statusText} (${endpoint})`);
+  }
+  return raw ? await res.text() : await res.json();
 }
 
 /**
@@ -48,7 +84,7 @@ export function parseSource(source) {
  * Recursively download a directory from GitHub into a local destination.
  */
 export async function downloadDir(owner, repo, remotePath, destDir) {
-  const contents = gh(`repos/${owner}/${repo}/contents/${remotePath}`);
+  const contents = await api(`repos/${owner}/${repo}/contents/${remotePath}`);
   const items = Array.isArray(contents) ? contents : [contents];
   const written = [];
 
@@ -63,7 +99,7 @@ export async function downloadDir(owner, repo, remotePath, destDir) {
       written.push(...sub);
     } else if (item.type === 'file') {
       await mkdir(dirname(localPath), { recursive: true });
-      const content = ghRaw(`repos/${owner}/${repo}/contents/${item.path}`);
+      const content = await api(`repos/${owner}/${repo}/contents/${item.path}`, { raw: true });
       await writeFile(localPath, content, 'utf8');
       written.push(localPath);
     }
@@ -86,7 +122,7 @@ export async function discoverRemoteComponents(owner, repo, subpath) {
     }
 
     if (typeFromPath && parts.length === 1) {
-      const contents = gh(`repos/${owner}/${repo}/contents/${subpath}`);
+      const contents = await api(`repos/${owner}/${repo}/contents/${subpath}`);
       if (!Array.isArray(contents)) return [];
       return contents
         .filter(c => c.type === 'dir')
@@ -97,11 +133,11 @@ export async function discoverRemoteComponents(owner, repo, subpath) {
   }
 
   const components = [];
-  const rootContents = gh(`repos/${owner}/${repo}/contents/`);
+  const rootContents = await api(`repos/${owner}/${repo}/contents/`);
   const typeDirs = rootContents.filter(c => c.type === 'dir' && KNOWN_TYPES.includes(c.name));
 
   for (const typeDir of typeDirs) {
-    const children = gh(`repos/${owner}/${repo}/contents/${typeDir.path}`);
+    const children = await api(`repos/${owner}/${repo}/contents/${typeDir.path}`);
     if (!Array.isArray(children)) continue;
     for (const child of children) {
       if (child.type === 'dir') {
