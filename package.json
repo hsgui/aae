@@ -1,0 +1,44 @@
+{
+  "name": "aae",
+  "version": "0.1.0",
+  "description": "AI Agent Engineering — Install and manage skills, agents, hooks, and workflows for AI coding assistants.",
+  "type": "module",
+  "bin": {
+    "aae": "./bin/aae.mjs"
+  },
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./skills/*": "./skills/*",
+    "./agents/*": "./agents/*",
+    "./hooks/*": "./hooks/*",
+    "./workflows/*": "./workflows/*"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "skills/",
+    "agents/",
+    "hooks/",
+    "workflows/"
+  ],
+  "scripts": {
+    "postinstall": "node bin/aae.mjs link --quiet",
+    "test": "node --test src/**/*.test.mjs"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "cursor",
+    "skills",
+    "hooks",
+    "workflows",
+    "coding-assistant",
+    "aae"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
