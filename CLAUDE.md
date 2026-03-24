@@ -38,7 +38,7 @@ This is an npm package that manages reusable components (skills, commands, agent
 ## Conventions
 
 - Each component is a directory under its type folder (e.g. `skills/my-skill/`)
-- Supports Agent Skills repos (SKILL.md at root level, like mattpocock/skills)
+- Supports Agent Skills repos (SKILL.md at root level, auto-discovered)
 - Metadata is read from `manifest.json`, `SKILL.md` frontmatter, or `README.md` heading
 - The CLI auto-detects which platforms are installed
 - GitHub auth: auto-reads `gh auth token`, or uses `GITHUB_TOKEN` / `GH_TOKEN` env var

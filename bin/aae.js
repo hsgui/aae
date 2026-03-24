@@ -54,9 +54,8 @@ Downloaded components are stored in ~/.aae/ for persistence across npx runs.
 
 Examples:
   aae add hsgui/aae                          Add all components from repo
-  aae add hsgui/aae/skills/my-skill          Add one skill
-  aae add mattpocock/skills/prd-to-plan      Add a skill from an Agent Skills repo
-  aae add mattpocock/skills                  Add all skills from an Agent Skills repo
+  aae add hsgui/aae/skills/deep-research     Add a specific skill
+  aae add hsgui/aae/skills/deep-research     Add deep-research skill from GitHub
   aae remove skills my-skill                 Remove a skill
   aae list                                   List all local components
   aae link                                   Link everything to detected platforms

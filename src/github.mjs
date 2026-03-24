@@ -188,7 +188,7 @@ export async function downloadDir(owner, repo, remotePath, destDir) {
  *
  * Supports two repo layouts:
  *   1. Type-based: skills/<name>/, commands/<name>/, etc.
- *   2. Skill-based: <name>/SKILL.md at the repo root (like mattpocock/skills)
+ *   2. Skill-based: <name>/SKILL.md at the repo root (Agent Skills format)
  */
 export async function discoverRemoteComponents(owner, repo, subpath) {
   const KNOWN_TYPES = ['skills', 'commands', 'agents', 'hooks', 'workflows'];

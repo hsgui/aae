@@ -7,14 +7,11 @@ Compatible with the [Agent Skills](https://agentskills.io) specification — wor
 ## Quick Start
 
 ```bash
-# Install a skill from any Agent Skills repo
-npx @hsgui/aae add mattpocock/skills/prd-to-plan
+# Install the deep-research skill
+npx @hsgui/aae add hsgui/aae/skills/deep-research
 
-# Install all skills from a repo
-npx @hsgui/aae add mattpocock/skills
-
-# Install from your own repo
-npx @hsgui/aae add owner/repo/skills/my-skill
+# Install all components from a repo
+npx @hsgui/aae add hsgui/aae
 ```
 
 ## Install from GitHub
@@ -22,12 +19,10 @@ npx @hsgui/aae add owner/repo/skills/my-skill
 Add components directly from any GitHub repo:
 
 ```bash
-aae add owner/repo                           # all components from a repo
-aae add owner/repo/skills/my-skill           # a specific skill (type/name format)
-aae add mattpocock/skills/tdd               # a skill from an Agent Skills repo
-aae add mattpocock/skills                    # all skills from an Agent Skills repo
-aae add https://github.com/owner/repo        # full URL
-aae add https://github.com/.../tree/main/skills/my-skill   # URL with path
+aae add hsgui/aae                            # all components from a repo
+aae add hsgui/aae/skills/deep-research       # a specific skill
+aae add https://github.com/hsgui/aae/tree/master/skills/deep-research  # full URL with path
+aae add https://github.com/hsgui/aae        # full GitHub URL
 ```
 
 The `add` command downloads the component to `~/.aae/`, then symlinks it to detected platforms — all in one step.
