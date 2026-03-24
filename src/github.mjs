@@ -2,32 +2,16 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 
-const GITHUB_API = 'https://api.github.com';
-
-let _cachedToken = undefined;
-
-function getGitHubToken() {
-  if (_cachedToken !== undefined) return _cachedToken;
-
-  _cachedToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '';
-  if (!_cachedToken) {
-    try {
-      _cachedToken = execSync('gh auth token 2>/dev/null', { encoding: 'utf8' }).trim();
-    } catch {
-      _cachedToken = '';
-    }
-  }
-  return _cachedToken;
+function gh(endpoint) {
+  const raw = execSync(`gh api "${endpoint}"`, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+  return JSON.parse(raw);
 }
 
-function getHeaders() {
-  const headers = {
-    'Accept': 'application/vnd.github.v3+json',
-    'User-Agent': 'aae-cli',
-  };
-  const token = getGitHubToken();
-  if (token) headers['Authorization'] = `token ${token}`;
-  return headers;
+function ghRaw(url) {
+  return execSync(`gh api "${url}" --header "Accept: application/vnd.github.raw"`, {
+    encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
+  });
 }
 
 /**
@@ -61,26 +45,10 @@ export function parseSource(source) {
 }
 
 /**
- * Fetch the contents of a directory from GitHub API.
- * Returns an array of { path, type, download_url } entries.
- */
-async function fetchContents(owner, repo, path = '') {
-  const url = `${GITHUB_API}/repos/${owner}/${repo}/contents/${path}`;
-  const res = await fetch(url, { headers: getHeaders() });
-  if (!res.ok) {
-    if (res.status === 404) throw new Error(`Not found: ${owner}/${repo}/${path}`);
-    if (res.status === 403) throw new Error(`Rate limited. Set GITHUB_TOKEN env var for higher limits.`);
-    throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
-  }
-  return res.json();
-}
-
-/**
  * Recursively download a directory from GitHub into a local destination.
- * Returns the list of files written.
  */
 export async function downloadDir(owner, repo, remotePath, destDir) {
-  const contents = await fetchContents(owner, repo, remotePath);
+  const contents = gh(`repos/${owner}/${repo}/contents/${remotePath}`);
   const items = Array.isArray(contents) ? contents : [contents];
   const written = [];
 
@@ -93,10 +61,9 @@ export async function downloadDir(owner, repo, remotePath, destDir) {
     if (item.type === 'dir') {
       const sub = await downloadDir(owner, repo, item.path, destDir);
       written.push(...sub);
-    } else if (item.type === 'file' && item.download_url) {
+    } else if (item.type === 'file') {
       await mkdir(dirname(localPath), { recursive: true });
-      const fileRes = await fetch(item.download_url);
-      const content = await fileRes.text();
+      const content = ghRaw(`repos/${owner}/${repo}/contents/${item.path}`);
       await writeFile(localPath, content, 'utf8');
       written.push(localPath);
     }
@@ -106,8 +73,6 @@ export async function downloadDir(owner, repo, remotePath, destDir) {
 
 /**
  * Discover components in a remote GitHub path.
- * Looks for known type directories (skills/, commands/, agents/, hooks/, workflows/)
- * or infers the type from the path.
  */
 export async function discoverRemoteComponents(owner, repo, subpath) {
   const KNOWN_TYPES = ['skills', 'commands', 'agents', 'hooks', 'workflows'];
@@ -121,7 +86,7 @@ export async function discoverRemoteComponents(owner, repo, subpath) {
     }
 
     if (typeFromPath && parts.length === 1) {
-      const contents = await fetchContents(owner, repo, subpath);
+      const contents = gh(`repos/${owner}/${repo}/contents/${subpath}`);
       if (!Array.isArray(contents)) return [];
       return contents
         .filter(c => c.type === 'dir')
@@ -132,11 +97,11 @@ export async function discoverRemoteComponents(owner, repo, subpath) {
   }
 
   const components = [];
-  const rootContents = await fetchContents(owner, repo, '');
+  const rootContents = gh(`repos/${owner}/${repo}/contents/`);
   const typeDirs = rootContents.filter(c => c.type === 'dir' && KNOWN_TYPES.includes(c.name));
 
   for (const typeDir of typeDirs) {
-    const children = await fetchContents(owner, repo, typeDir.path);
+    const children = gh(`repos/${owner}/${repo}/contents/${typeDir.path}`);
     if (!Array.isArray(children)) continue;
     for (const child of children) {
       if (child.type === 'dir') {
