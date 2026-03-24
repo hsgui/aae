@@ -1,10 +1,10 @@
 {
-  "name": "aae",
+  "name": "@hsgui/aae",
   "version": "0.1.0",
   "description": "AI Agent Engineering — Install and manage skills, agents, hooks, and workflows for AI coding assistants.",
   "type": "module",
   "bin": {
-    "aae": "./bin/aae.mjs"
+    "aae": "bin/aae.js"
   },
   "main": "./src/index.mjs",
   "exports": {
@@ -25,7 +25,7 @@
     "workflows/"
   ],
   "scripts": {
-    "postinstall": "node bin/aae.mjs link --quiet",
+    "postinstall": "node bin/aae.js link --quiet",
     "test": "node --test src/**/*.test.mjs"
   },
   "keywords": [
