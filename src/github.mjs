@@ -45,9 +45,25 @@ async function api(endpoint, { raw = false } = {}) {
 
   const res = await fetch(url, { headers });
   if (!res.ok) {
-    throw new Error(`GitHub API ${res.status}: ${res.statusText} (${endpoint})`);
+    let msg = `GitHub API ${res.status}: ${res.statusText} (${endpoint})`;
+    if (res.status === 403 || res.status === 429) {
+      msg += '\n\nRate limit exceeded. Set a token to increase the limit:'
+        + '\n  export GITHUB_TOKEN=ghp_xxx'
+        + '\n  # or install gh CLI: https://cli.github.com';
+    }
+    throw new Error(msg);
   }
   return raw ? await res.text() : await res.json();
+}
+
+/**
+ * Download a single file via raw.githubusercontent.com (no API rate limit).
+ */
+async function fetchRaw(owner, repo, filePath) {
+  const url = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${filePath}`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'aae-cli' } });
+  if (!res.ok) throw new Error(`Failed to download ${filePath}: ${res.status}`);
+  return await res.text();
 }
 
 /**
@@ -99,7 +115,9 @@ export async function downloadDir(owner, repo, remotePath, destDir) {
       written.push(...sub);
     } else if (item.type === 'file') {
       await mkdir(dirname(localPath), { recursive: true });
-      const content = await api(`repos/${owner}/${repo}/contents/${item.path}`, { raw: true });
+      const content = hasGh()
+        ? await api(`repos/${owner}/${repo}/contents/${item.path}`, { raw: true })
+        : await fetchRaw(owner, repo, item.path);
       await writeFile(localPath, content, 'utf8');
       written.push(localPath);
     }
