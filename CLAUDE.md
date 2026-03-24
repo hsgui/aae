@@ -14,7 +14,7 @@ This is an npm package that manages reusable components (skills, commands, agent
 
 | Type       | Cursor                   | Claude Code              |
 |------------|--------------------------|--------------------------|
-| skills     | ~/.cursor/skills/        | —                        |
+| skills     | ~/.cursor/skills/        | ~/.claude/skills/         |
 | commands   | —                        | ~/.claude/commands/       |
 | agents     | ~/.cursor/agents/        | ~/.claude/agents/         |
 | hooks      | ~/.cursor/hooks/         | ~/.claude/hooks/          |

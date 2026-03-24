@@ -20,6 +20,7 @@ export const TARGETS = {
     label: 'Claude Code',
     configDir: join(home, '.claude'),
     typeMap: {
+      skills:    join(home, '.claude', 'skills'),
       commands:  join(home, '.claude', 'commands'),
       agents:    join(home, '.claude', 'agents'),
       hooks:     join(home, '.claude', 'hooks'),

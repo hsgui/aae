@@ -57,7 +57,7 @@ Components are symlinked to the right location based on platform:
 
 | Type       | Cursor (`~/.cursor/`)    | Claude Code (`~/.claude/`) |
 |------------|--------------------------|----------------------------|
-| skills     | `skills/<name>/`         | —                          |
+| skills     | `skills/<name>/`         | `skills/<name>/`           |
 | commands   | —                        | `commands/<name>/`         |
 | agents     | `agents/<name>/`         | `agents/<name>/`           |
 | hooks      | `hooks/<name>/`          | `hooks/<name>/`            |
@@ -86,7 +86,7 @@ aae/
 Create a directory under the appropriate type folder:
 
 ```bash
-skills/my-skill/SKILL.md               # Cursor skill
+skills/my-skill/SKILL.md               # Skill (both platforms)
 commands/my-cmd/action.md              # Claude slash command
 agents/my-agent/manifest.json          # Agent (both platforms)
 ```
