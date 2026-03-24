@@ -42,7 +42,7 @@ Source formats:
 Types: ${COMPONENT_TYPES.join(', ')}
 
 Component ↔ Platform mapping:
-  skills/      → Cursor (~/.cursor/skills/)
+  skills/      → Cursor (~/.cursor/skills/) + Claude (~/.claude/skills/)
   commands/    → Claude (~/.claude/commands/)
   agents/      → Cursor + Claude
   hooks/       → Cursor + Claude
