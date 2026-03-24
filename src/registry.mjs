@@ -1,36 +1,67 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const ROOT = resolve(__dirname, '..');
+const PACKAGE_ROOT = resolve(__dirname, '..');
+const STORE_ROOT = join(homedir(), '.aae');
 
 const COMPONENT_TYPES = ['skills', 'commands', 'agents', 'hooks', 'workflows'];
 
 export function getRoot() {
-  return ROOT;
+  return PACKAGE_ROOT;
+}
+
+export function getStoreRoot() {
+  return STORE_ROOT;
 }
 
 export function getComponentDir(type) {
+  validateType(type);
+  return join(PACKAGE_ROOT, type);
+}
+
+export function getStoreComponentDir(type) {
+  validateType(type);
+  return join(STORE_ROOT, type);
+}
+
+function validateType(type) {
   if (!COMPONENT_TYPES.includes(type)) {
     throw new Error(`Unknown component type: ${type}. Must be one of: ${COMPONENT_TYPES.join(', ')}`);
   }
-  return join(ROOT, type);
+}
+
+export async function findComponentDir(type, name) {
+  for (const base of [getStoreComponentDir(type), getComponentDir(type)]) {
+    const dir = join(base, name);
+    try {
+      const s = await stat(dir);
+      if (s.isDirectory()) return dir;
+    } catch { /* not found */ }
+  }
+  return null;
 }
 
 export async function listComponents(type) {
-  const dir = getComponentDir(type);
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
+  validateType(type);
+  const bases = [getComponentDir(type), getStoreComponentDir(type)];
+  const seen = new Set();
   const components = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-    const meta = await readComponentMeta(type, entry.name);
-    components.push({ name: entry.name, type, ...meta });
+
+  for (const baseDir of bases) {
+    let entries;
+    try {
+      entries = await readdir(baseDir, { withFileTypes: true });
+    } catch { continue; }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.') || seen.has(entry.name)) continue;
+      seen.add(entry.name);
+      const compDir = join(baseDir, entry.name);
+      const meta = await readComponentMeta(compDir);
+      components.push({ name: entry.name, type, dir: compDir, ...meta });
+    }
   }
   return components;
 }
@@ -43,15 +74,11 @@ export async function listAll() {
   return all;
 }
 
-async function readComponentMeta(type, name) {
-  const dir = join(getComponentDir(type), name);
-
-  for (const file of ['manifest.json']) {
-    try {
-      const raw = await readFile(join(dir, file), 'utf8');
-      return JSON.parse(raw);
-    } catch { /* fall through */ }
-  }
+async function readComponentMeta(dir) {
+  try {
+    const raw = await readFile(join(dir, 'manifest.json'), 'utf8');
+    return JSON.parse(raw);
+  } catch { /* fall through */ }
 
   for (const file of ['SKILL.md', 'README.md']) {
     try {
@@ -101,12 +128,7 @@ function parseFrontmatter(raw) {
 }
 
 export async function componentExists(type, name) {
-  try {
-    const s = await stat(join(getComponentDir(type), name));
-    return s.isDirectory();
-  } catch {
-    return false;
-  }
+  return (await findComponentDir(type, name)) !== null;
 }
 
 export { COMPONENT_TYPES };

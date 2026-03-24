@@ -1,7 +1,6 @@
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { stat } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
 
 const home = homedir();
 

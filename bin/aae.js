@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { join } from 'node:path';
-import { rm } from 'node:fs/promises';
-import { listAll, listComponents, COMPONENT_TYPES, getRoot } from '../src/registry.mjs';
+import { mkdir, rm } from 'node:fs/promises';
+import { listAll, listComponents, COMPONENT_TYPES, getRoot, getStoreRoot, findComponentDir } from '../src/registry.mjs';
 import { linkComponent, unlinkComponent, linkAll, unlinkAll } from '../src/linker.mjs';
 import { detectTargets, getTargetLabel, TARGETS } from '../src/targets.mjs';
 import { parseSource, discoverRemoteComponents, downloadDir } from '../src/github.mjs';
@@ -35,7 +35,8 @@ Options:
 
 Source formats:
   owner/repo                       All components from a repo
-  owner/repo/type/name             A specific component
+  owner/repo/path/to/skill         A specific skill (auto-detected by SKILL.md)
+  owner/repo/type/name             A specific component (skills/, commands/, etc.)
   https://github.com/owner/repo    Full GitHub URL
   https://github.com/.../tree/main/path   URL with path
 
@@ -48,10 +49,14 @@ Component ↔ Platform mapping:
   hooks/       → Cursor + Claude
   workflows/   → Cursor (~/.cursor/workflows/) + Claude (~/.claude/commands/)
 
+Supports repos with SKILL.md files at root level (Agent Skills format).
+Downloaded components are stored in ~/.aae/ for persistence across npx runs.
+
 Examples:
   aae add hsgui/aae                          Add all components from repo
   aae add hsgui/aae/skills/my-skill          Add one skill
-  aae add hsgui/aae/commands/deploy          Add one command
+  aae add mattpocock/skills/prd-to-plan      Add a skill from an Agent Skills repo
+  aae add mattpocock/skills                  Add all skills from an Agent Skills repo
   aae remove skills my-skill                 Remove a skill
   aae list                                   List all local components
   aae link                                   Link everything to detected platforms
@@ -81,17 +86,22 @@ async function runAdd(source, { quiet, targets }) {
     return;
   }
 
-  const root = getRoot();
+  const store = getStoreRoot();
   let added = 0;
 
   for (const comp of components) {
     const type = comp.type || 'skills';
-    const destDir = join(root, type, comp.name);
+    const destDir = join(store, type, comp.name);
+
+    // Clean destination before downloading
+    await rm(destDir, { recursive: true, force: true }).catch(() => {});
+    await mkdir(destDir, { recursive: true });
+
     if (!quiet) console.log(`  Downloading ${type}/${comp.name}...`);
     const files = await downloadDir(owner, repo, comp.remotePath, destDir);
-    if (!quiet) console.log(`    ${files.length} file(s) saved`);
+    if (!quiet) console.log(`    ${files.length} file(s) → ${destDir}`);
 
-    const results = await linkComponent(type, comp.name, { quiet, targets });
+    const results = await linkComponent(type, comp.name, { quiet, targets, src: destDir });
     const linked = results.filter(r => r.result === 'linked' || r.result === 'already');
     if (!quiet && linked.length > 0) {
       for (const r of results) {
@@ -105,8 +115,12 @@ async function runAdd(source, { quiet, targets }) {
 }
 
 async function runRemove(type, name, { quiet, targets }) {
-  const root = getRoot();
-  const compDir = join(root, type, name);
+  const compDir = await findComponentDir(type, name);
+
+  if (!compDir) {
+    console.error(`  ✗ ${type}/${name} not found`);
+    return;
+  }
 
   await unlinkComponent(type, name, { quiet, targets });
 
@@ -187,11 +201,12 @@ async function main() {
       if (!quiet) console.log(`Targets: ${targets.map(getTargetLabel).join(', ')}\n`);
 
       if (positional.length >= 2) {
-        await linkComponent(positional[0], positional[1], { quiet, targets });
+        const src = await findComponentDir(positional[0], positional[1]);
+        await linkComponent(positional[0], positional[1], { quiet, targets, src });
       } else if (positional.length === 1) {
         const items = await listComponents(positional[0]);
         for (const item of items) {
-          await linkComponent(positional[0], item.name, { quiet, targets });
+          await linkComponent(positional[0], item.name, { quiet, targets, src: item.dir });
         }
       } else {
         const count = await linkAll({ quiet, targets });

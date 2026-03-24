@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readdir, copyFile as cpFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, copyFile as cpFile, rm, stat as statFn } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -108,6 +108,15 @@ async function listSubdirs(dir) {
   }
 }
 
+async function hasSkillMd(dir) {
+  try {
+    const s = await statFn(join(dir, 'SKILL.md'));
+    return s.isFile();
+  } catch {
+    return false;
+  }
+}
+
 // ── Public API ───────────────────────────────────────────────────────
 
 /**
@@ -175,7 +184,11 @@ export async function downloadDir(owner, repo, remotePath, destDir) {
 }
 
 /**
- * Discover components in a remote GitHub path.
+ * Discover components in a remote GitHub repo.
+ *
+ * Supports two repo layouts:
+ *   1. Type-based: skills/<name>/, commands/<name>/, etc.
+ *   2. Skill-based: <name>/SKILL.md at the repo root (like mattpocock/skills)
  */
 export async function discoverRemoteComponents(owner, repo, subpath) {
   const KNOWN_TYPES = ['skills', 'commands', 'agents', 'hooks', 'workflows'];
@@ -202,35 +215,77 @@ export async function discoverRemoteComponents(owner, repo, subpath) {
         .map(c => ({ type: typeFromPath, name: c.name, remotePath: c.path }));
     }
 
-    return [{ type: null, name: parts[parts.length - 1], remotePath: subpath }];
+    // Subpath doesn't match a known type — treat as a direct skill
+    return [{ type: 'skills', name: parts[parts.length - 1], remotePath: subpath }];
   }
 
+  // No subpath — scan entire repo for components
   if (!useApi()) {
     return await withTarball(owner, repo, async (tmp) => {
       const components = [];
       const rootDirs = await listSubdirs(tmp);
+
+      // First: look for known type directories (skills/, commands/, etc.)
       for (const dir of rootDirs.filter(d => KNOWN_TYPES.includes(d))) {
         const children = await listSubdirs(join(tmp, dir));
         for (const name of children) {
           components.push({ type: dir, name, remotePath: `${dir}/${name}` });
         }
       }
+
+      // Fallback: scan root-level directories for SKILL.md (Agent Skills repos)
+      if (components.length === 0) {
+        for (const dir of rootDirs) {
+          if (await hasSkillMd(join(tmp, dir))) {
+            components.push({ type: 'skills', name: dir, remotePath: dir });
+          }
+        }
+      }
+
       return components;
     });
   }
 
+  // API-based discovery
   const components = [];
   const rootContents = await api(`repos/${owner}/${repo}/contents/`);
   const typeDirs = rootContents.filter(c => c.type === 'dir' && KNOWN_TYPES.includes(c.name));
 
-  for (const typeDir of typeDirs) {
-    const children = await api(`repos/${owner}/${repo}/contents/${typeDir.path}`);
-    if (!Array.isArray(children)) continue;
-    for (const child of children) {
-      if (child.type === 'dir') {
-        components.push({ type: typeDir.name, name: child.name, remotePath: child.path });
+  if (typeDirs.length > 0) {
+    for (const typeDir of typeDirs) {
+      const children = await api(`repos/${owner}/${repo}/contents/${typeDir.path}`);
+      if (!Array.isArray(children)) continue;
+      for (const child of children) {
+        if (child.type === 'dir') {
+          components.push({ type: typeDir.name, name: child.name, remotePath: child.path });
+        }
       }
     }
+    return components;
   }
+
+  // No known type dirs — use git tree API to find SKILL.md files (single API call)
+  try {
+    const tree = await api(`repos/${owner}/${repo}/git/trees/HEAD?recursive=1`);
+    const skillMdFiles = tree.tree.filter(
+      item => item.type === 'blob' && /^[^/]+\/SKILL\.md$/.test(item.path)
+    );
+    for (const item of skillMdFiles) {
+      const name = item.path.split('/')[0];
+      components.push({ type: 'skills', name, remotePath: name });
+    }
+  } catch {
+    // Fallback: check each root dir individually
+    const dirs = rootContents.filter(c => c.type === 'dir' && !c.name.startsWith('.'));
+    for (const dir of dirs) {
+      try {
+        const contents = await api(`repos/${owner}/${repo}/contents/${dir.path}`);
+        if (Array.isArray(contents) && contents.some(c => c.name === 'SKILL.md' && c.type === 'file')) {
+          components.push({ type: 'skills', name: dir.name, remotePath: dir.path });
+        }
+      } catch { /* skip */ }
+    }
+  }
+
   return components;
 }
