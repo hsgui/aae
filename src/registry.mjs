@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
-const COMPONENT_TYPES = ['skills', 'agents', 'hooks', 'workflows'];
+const COMPONENT_TYPES = ['skills', 'commands', 'agents', 'hooks', 'workflows'];
 
 export function getRoot() {
   return ROOT;
@@ -45,25 +45,25 @@ export async function listAll() {
 
 async function readComponentMeta(type, name) {
   const dir = join(getComponentDir(type), name);
-  const manifest = join(dir, 'manifest.json');
-  const skillMd = join(dir, 'SKILL.md');
 
-  try {
-    const raw = await readFile(manifest, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    // fall through
+  for (const file of ['manifest.json']) {
+    try {
+      const raw = await readFile(join(dir, file), 'utf8');
+      return JSON.parse(raw);
+    } catch { /* fall through */ }
   }
 
-  try {
-    const md = await readFile(skillMd, 'utf8');
-    const match = md.match(/^---\n([\s\S]*?)\n---/);
-    if (match) {
-      const frontmatter = parseFrontmatter(match[1]);
-      return { description: frontmatter.description || '' };
-    }
-  } catch {
-    // fall through
+  for (const file of ['SKILL.md', 'README.md']) {
+    try {
+      const md = await readFile(join(dir, file), 'utf8');
+      const match = md.match(/^---\n([\s\S]*?)\n---/);
+      if (match) {
+        const frontmatter = parseFrontmatter(match[1]);
+        return { description: frontmatter.description || '' };
+      }
+      const heading = md.match(/^#\s+(.+)/m);
+      if (heading) return { description: heading[1] };
+    } catch { /* fall through */ }
   }
 
   return { description: '' };

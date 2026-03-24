@@ -2,35 +2,68 @@
 
 import { listAll, listComponents, COMPONENT_TYPES } from '../src/registry.mjs';
 import { linkComponent, unlinkComponent, linkAll, unlinkAll } from '../src/linker.mjs';
+import { detectTargets, getTargetLabel, TARGETS } from '../src/targets.mjs';
 
-const [command, ...args] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const command = argv.find(a => !a.startsWith('-'));
+const args = argv.filter(a => a !== command);
+
+function flag(name) {
+  const i = args.indexOf(name);
+  if (i === -1) return undefined;
+  return args[i + 1];
+}
 
 const HELP = `
 aae — AI Agent Engineering
 
 Usage:
-  aae list   [type]              List available components
-  aae link   [type] [name]       Symlink components into ~/.cursor/
-  aae unlink [type] [name]       Remove symlinks from ~/.cursor/
-  aae help                       Show this help
+  aae list     [type]              List available components
+  aae link     [type] [name]       Symlink components into detected platforms
+  aae unlink   [type] [name]       Remove symlinks
+  aae targets                      Show detected platforms
+  aae help                         Show this help
+
+Options:
+  --target <cursor|claude>         Target a specific platform (default: auto-detect)
+  --quiet                          Suppress output
 
 Types: ${COMPONENT_TYPES.join(', ')}
 
+Component ↔ Platform mapping:
+  skills/      → Cursor (~/.cursor/skills/)
+  commands/    → Claude (~/.claude/commands/)
+  agents/      → Cursor + Claude
+  hooks/       → Cursor + Claude
+  workflows/   → Cursor (~/.cursor/workflows/) + Claude (~/.claude/commands/)
+
 Examples:
-  aae list                       List all components
-  aae list skills                List only skills
-  aae link                       Link all components
-  aae link skills github         Link a specific skill
-  aae unlink skills github       Unlink a specific skill
+  aae list                         List all components
+  aae link                         Link everything to all detected platforms
+  aae link --target claude         Link only to Claude Code
+  aae link commands my-cmd         Link a specific command to Claude
 `.trim();
+
+async function resolveTargets() {
+  const explicit = flag('--target');
+  if (explicit) {
+    if (!TARGETS[explicit]) {
+      console.error(`Unknown target: ${explicit}. Available: ${Object.keys(TARGETS).join(', ')}`);
+      process.exit(1);
+    }
+    return [explicit];
+  }
+  return await detectTargets();
+}
 
 async function main() {
   const quiet = args.includes('--quiet');
+  const positional = args.filter(a => !a.startsWith('-') && a !== flag('--target'));
 
   switch (command) {
     case 'list':
     case 'ls': {
-      const [type] = args.filter(a => !a.startsWith('-'));
+      const [type] = positional;
       if (type) {
         const items = await listComponents(type);
         if (items.length === 0) {
@@ -54,45 +87,56 @@ async function main() {
             }
           }
         }
-        if (total === 0) {
-          console.log('No components found.');
-        }
+        if (total === 0) console.log('No components found.');
         console.log();
       }
       break;
     }
 
     case 'link': {
-      const positional = args.filter(a => !a.startsWith('-'));
+      const targets = await resolveTargets();
+      if (!quiet) console.log(`Targets: ${targets.map(getTargetLabel).join(', ')}\n`);
+
       if (positional.length >= 2) {
-        await linkComponent(positional[0], positional[1], { quiet });
+        await linkComponent(positional[0], positional[1], { quiet, targets });
       } else if (positional.length === 1) {
         const items = await listComponents(positional[0]);
         for (const item of items) {
-          await linkComponent(positional[0], item.name, { quiet });
+          await linkComponent(positional[0], item.name, { quiet, targets });
         }
       } else {
-        if (!quiet) console.log('Linking all components...');
-        const count = await linkAll({ quiet });
-        if (!quiet) console.log(`Done. ${count} component(s) linked.`);
+        const count = await linkAll({ quiet, targets });
+        if (!quiet) console.log(`\nDone. ${count} component(s) linked.`);
       }
       break;
     }
 
     case 'unlink': {
-      const positional = args.filter(a => !a.startsWith('-'));
+      const targets = await resolveTargets();
+      if (!quiet) console.log(`Targets: ${targets.map(getTargetLabel).join(', ')}\n`);
+
       if (positional.length >= 2) {
-        await unlinkComponent(positional[0], positional[1], { quiet });
+        await unlinkComponent(positional[0], positional[1], { quiet, targets });
       } else if (positional.length === 1) {
         const items = await listComponents(positional[0]);
         for (const item of items) {
-          await unlinkComponent(positional[0], item.name, { quiet });
+          await unlinkComponent(positional[0], item.name, { quiet, targets });
         }
       } else {
-        if (!quiet) console.log('Unlinking all components...');
-        const count = await unlinkAll({ quiet });
-        if (!quiet) console.log(`Done. ${count} component(s) unlinked.`);
+        const count = await unlinkAll({ quiet, targets });
+        if (!quiet) console.log(`\nDone. ${count} component(s) unlinked.`);
       }
+      break;
+    }
+
+    case 'targets': {
+      const detected = await detectTargets();
+      console.log('\nPlatform detection:\n');
+      for (const [name, target] of Object.entries(TARGETS)) {
+        const found = detected.includes(name);
+        console.log(`  ${found ? '✓' : '✗'} ${target.label} (${target.configDir})`);
+      }
+      console.log();
       break;
     }
 

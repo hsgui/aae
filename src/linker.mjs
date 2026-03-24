@@ -1,28 +1,13 @@
-import { mkdir, symlink, readlink, unlink, readdir, stat } from 'node:fs/promises';
+import { mkdir, symlink, readlink, unlink, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 import { getComponentDir, listComponents, COMPONENT_TYPES } from './registry.mjs';
+import { detectTargets, resolveTargetDir, getTargetLabel } from './targets.mjs';
 
-const CURSOR_SKILLS_DIR = join(homedir(), '.cursor', 'skills');
-
-const TARGET_DIRS = {
-  skills: CURSOR_SKILLS_DIR,
-  agents: join(homedir(), '.cursor', 'agents'),
-  hooks: join(homedir(), '.cursor', 'hooks'),
-  workflows: join(homedir(), '.cursor', 'workflows'),
-};
-
-export async function linkComponent(type, name, { quiet = false } = {}) {
-  const src = join(getComponentDir(type), name);
-  const targetDir = TARGET_DIRS[type];
-  const dest = join(targetDir, name);
-
-  await mkdir(targetDir, { recursive: true });
-
+async function symlinkSafe(src, dest, { quiet = false, label = '' } = {}) {
   try {
     const existing = await readlink(dest);
     if (existing === src) {
-      if (!quiet) console.log(`  ✓ ${type}/${name} (already linked)`);
+      if (!quiet) console.log(`  ✓ ${label} (already linked)`);
       return 'already';
     }
     await unlink(dest);
@@ -30,58 +15,91 @@ export async function linkComponent(type, name, { quiet = false } = {}) {
     if (err.code !== 'ENOENT') {
       try {
         const s = await stat(dest);
-        if (s.isDirectory()) {
-          if (!quiet) console.log(`  ⚠ ${type}/${name} skipped (non-symlink exists)`);
+        if (s.isDirectory() || s.isFile()) {
+          if (!quiet) console.log(`  ⚠ ${label} skipped (non-symlink exists)`);
           return 'skipped';
         }
-      } catch {
-        // doesn't exist, proceed
-      }
+      } catch { /* doesn't exist, proceed */ }
     }
   }
 
   await symlink(src, dest, 'dir');
-  if (!quiet) console.log(`  ✓ ${type}/${name} → linked`);
+  if (!quiet) console.log(`  ✓ ${label} → linked`);
   return 'linked';
 }
 
-export async function unlinkComponent(type, name, { quiet = false } = {}) {
-  const dest = join(TARGET_DIRS[type], name);
+async function unsymlinkSafe(src, dest, { quiet = false, label = '' } = {}) {
   try {
     const target = await readlink(dest);
-    const expected = join(getComponentDir(type), name);
-    if (target !== expected) {
-      if (!quiet) console.log(`  ⚠ ${type}/${name} skipped (not managed by aae)`);
+    if (target !== src) {
+      if (!quiet) console.log(`  ⚠ ${label} skipped (not managed by aae)`);
       return 'skipped';
     }
     await unlink(dest);
-    if (!quiet) console.log(`  ✓ ${type}/${name} → unlinked`);
+    if (!quiet) console.log(`  ✓ ${label} → unlinked`);
     return 'unlinked';
   } catch {
-    if (!quiet) console.log(`  - ${type}/${name} (not linked)`);
+    if (!quiet) console.log(`  - ${label} (not linked)`);
     return 'not_found';
   }
 }
 
-export async function linkAll({ quiet = false } = {}) {
+export async function linkComponent(type, name, { quiet = false, targets } = {}) {
+  const resolvedTargets = targets || await detectTargets();
+  const src = join(getComponentDir(type), name);
+  const results = [];
+
+  for (const t of resolvedTargets) {
+    const targetDir = resolveTargetDir(t, type);
+    if (!targetDir) continue;
+
+    await mkdir(targetDir, { recursive: true });
+    const dest = join(targetDir, name);
+    const label = `[${getTargetLabel(t)}] ${type}/${name}`;
+    const result = await symlinkSafe(src, dest, { quiet, label });
+    results.push({ target: t, result });
+  }
+  return results;
+}
+
+export async function unlinkComponent(type, name, { quiet = false, targets } = {}) {
+  const resolvedTargets = targets || await detectTargets();
+  const src = join(getComponentDir(type), name);
+  const results = [];
+
+  for (const t of resolvedTargets) {
+    const targetDir = resolveTargetDir(t, type);
+    if (!targetDir) continue;
+
+    const dest = join(targetDir, name);
+    const label = `[${getTargetLabel(t)}] ${type}/${name}`;
+    const result = await unsymlinkSafe(src, dest, { quiet, label });
+    results.push({ target: t, result });
+  }
+  return results;
+}
+
+export async function linkAll({ quiet = false, targets } = {}) {
+  const resolvedTargets = targets || await detectTargets();
   let count = 0;
   for (const type of COMPONENT_TYPES) {
     const components = await listComponents(type);
     for (const c of components) {
-      const result = await linkComponent(type, c.name, { quiet });
-      if (result === 'linked') count++;
+      const results = await linkComponent(type, c.name, { quiet, targets: resolvedTargets });
+      count += results.filter(r => r.result === 'linked').length;
     }
   }
   return count;
 }
 
-export async function unlinkAll({ quiet = false } = {}) {
+export async function unlinkAll({ quiet = false, targets } = {}) {
+  const resolvedTargets = targets || await detectTargets();
   let count = 0;
   for (const type of COMPONENT_TYPES) {
     const components = await listComponents(type);
     for (const c of components) {
-      const result = await unlinkComponent(type, c.name, { quiet });
-      if (result === 'unlinked') count++;
+      const results = await unlinkComponent(type, c.name, { quiet, targets: resolvedTargets });
+      count += results.filter(r => r.result === 'unlinked').length;
     }
   }
   return count;

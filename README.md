@@ -1,91 +1,95 @@
 # aae — AI Agent Engineering
 
-Install and manage **skills**, **agents**, **hooks**, and **workflows** for AI coding assistants.
+Install and manage **skills**, **commands**, **agents**, **hooks**, and **workflows** for AI coding assistants. Supports both **Cursor** and **Claude Code**.
 
 ## Quick Start
 
 ```bash
-# Clone and link all components into ~/.cursor/
-git clone <repo-url> && cd aae
-npm install
-npm link
-
-# Or install from npm (once published)
-npm install -g aae
+git clone https://github.com/hsgui/aae.git && cd aae
+npm install   # auto-links all components to detected platforms
+npm link      # makes `aae` command available globally
 ```
-
-After installation, all bundled components are automatically symlinked into `~/.cursor/` via `postinstall`.
 
 ## Usage
 
 ```bash
-# List available components
-aae list
-aae list skills
+aae targets                      # show detected platforms
+aae list                         # list all components
+aae list commands                # list only commands
 
-# Link / unlink components into ~/.cursor/
-aae link                       # link everything
-aae link skills github         # link one skill
-aae unlink skills github       # unlink one skill
+aae link                         # link everything to all platforms
+aae link --target claude         # link only to Claude Code
+aae link commands my-cmd         # link a specific command
+
+aae unlink commands my-cmd       # unlink a specific command
 ```
+
+## Platform Mapping
+
+Components are symlinked to the right location based on platform:
+
+| Type       | Cursor (`~/.cursor/`)    | Claude Code (`~/.claude/`) |
+|------------|--------------------------|----------------------------|
+| skills     | `skills/<name>/`         | —                          |
+| commands   | —                        | `commands/<name>/`         |
+| agents     | `agents/<name>/`         | `agents/<name>/`           |
+| hooks      | `hooks/<name>/`          | `hooks/<name>/`            |
+| workflows  | `workflows/<name>/`      | `commands/<name>/`         |
 
 ## Project Structure
 
 ```
 aae/
-├── bin/aae.mjs          # CLI entry point
+├── bin/aae.mjs            # CLI
 ├── src/
-│   ├── index.mjs        # Public API
-│   ├── registry.mjs     # Component discovery
-│   └── linker.mjs       # Symlink manager
-├── skills/              # Cursor skills (SKILL.md per directory)
-├── agents/              # Agent configurations
-├── hooks/               # Lifecycle hooks
-└── workflows/           # Workflow definitions
+│   ├── index.mjs          # Public API
+│   ├── targets.mjs        # Platform detection & path mapping
+│   ├── registry.mjs       # Component discovery
+│   └── linker.mjs         # Symlink manager
+├── skills/                # Cursor skills (SKILL.md)
+├── commands/              # Claude slash commands (.md files)
+├── agents/                # Agent definitions (both platforms)
+├── hooks/                 # Lifecycle hooks (both platforms)
+└── workflows/             # Workflow definitions (both platforms)
 ```
 
 ## Adding Components
 
-### Skills
+Create a directory under the appropriate type folder:
 
-Create a directory under `skills/` with a `SKILL.md`:
+```bash
+# Cursor skill
+skills/my-skill/SKILL.md
 
-```
-skills/my-skill/
-└── SKILL.md
-```
+# Claude slash command (namespace with .md files)
+commands/my-cmd/action.md
 
-The `SKILL.md` must include YAML frontmatter:
-
-```yaml
----
-name: my-skill
-description: What this skill does and when to use it.
----
+# Agent (works on both platforms)
+agents/my-agent/manifest.json
 ```
 
-### Agents / Hooks / Workflows
-
-Same pattern — create a directory under the corresponding folder with either a `SKILL.md` or `manifest.json` describing the component.
+Metadata is read from `manifest.json`, `SKILL.md` frontmatter, or `README.md` heading.
 
 ## Third-Party Packages
 
-Components can also be published as standalone npm packages following the naming convention:
+Publish standalone npm packages following naming conventions:
 
-| Type      | Package name pattern      |
-|-----------|---------------------------|
-| Skills    | `aae-skill-<name>`        |
-| Agents    | `aae-agent-<name>`        |
-| Hooks     | `aae-hook-<name>`         |
-| Workflows | `aae-workflow-<name>`     |
+| Type       | npm package pattern       |
+|------------|---------------------------|
+| Skills     | `aae-skill-<name>`        |
+| Commands   | `aae-command-<name>`      |
+| Agents     | `aae-agent-<name>`        |
+| Hooks      | `aae-hook-<name>`         |
+| Workflows  | `aae-workflow-<name>`     |
 
 ## Programmatic API
 
 ```js
-import { listAll, linkComponent, unlinkComponent } from 'aae';
+import { listAll, linkComponent, detectTargets } from 'aae';
 
+const targets = await detectTargets();  // ['cursor', 'claude']
 const components = await listAll();
-await linkComponent('skills', 'github');
+await linkComponent('commands', 'my-cmd', { targets: ['claude'] });
 ```
 
 ## License
