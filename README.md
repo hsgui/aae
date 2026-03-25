@@ -196,6 +196,11 @@ const components = await listAll();
 await linkComponent('skills', 'my-skill', { targets: ['claude'], src: '/path/to/skill' });
 ```
 
+## Acknowledgements
+
+- [vercel-labs/skills](https://github.com/vercel-labs/skills) — The open agent skills CLI and ecosystem that defined the `SKILL.md` specification. `aae` is compatible with repos that follow this format.
+- [mattpocock/skills](https://github.com/mattpocock/skills) — A curated collection of high-quality agent skills for planning, development, and tooling that helped inspire the direction of this project.
+
 ## License
 
 MIT
