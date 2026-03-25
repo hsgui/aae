@@ -26,6 +26,17 @@ export const TARGETS = {
       workflows: join(home, '.claude', 'commands'),
     },
   },
+  'claude-internal': {
+    label: 'Claude Code (Internal)',
+    configDir: join(home, '.claude-internal'),
+    typeMap: {
+      skills:    join(home, '.claude-internal', 'skills'),
+      commands:  join(home, '.claude-internal', 'commands'),
+      agents:    join(home, '.claude-internal', 'agents'),
+      hooks:     join(home, '.claude-internal', 'hooks'),
+      workflows: join(home, '.claude-internal', 'commands'),
+    },
+  },
 };
 
 export async function detectTargets() {

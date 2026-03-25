@@ -2,6 +2,7 @@
 
 import { join } from 'node:path';
 import { mkdir, rm } from 'node:fs/promises';
+import { createInterface } from 'node:readline';
 import { listAll, listComponents, COMPONENT_TYPES, getRoot, getStoreRoot, findComponentDir } from '../src/registry.mjs';
 import { linkComponent, unlinkComponent, linkAll, unlinkAll } from '../src/linker.mjs';
 import { detectTargets, getTargetLabel, TARGETS } from '../src/targets.mjs';
@@ -15,6 +16,49 @@ function flag(name) {
   const i = args.indexOf(name);
   if (i === -1) return undefined;
   return args[i + 1];
+}
+
+function prompt(question) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise(resolve => {
+    rl.question(question, answer => { rl.close(); resolve(answer.trim()); });
+  });
+}
+
+async function promptTargets() {
+  const entries = Object.entries(TARGETS);
+  const detected = await detectTargets();
+
+  console.log('\n\x1b[33mWhich target(s) would you like to install for?\x1b[0m\n');
+  entries.forEach(([name, target], i) => {
+    const installed = detected.includes(name) ? '' : ' \x1b[2m(not detected)\x1b[0m';
+    console.log(`  \x1b[32m${i + 1})\x1b[0m ${target.label.padEnd(24)} \x1b[2m(${target.configDir})\x1b[0m${installed}`);
+  });
+  console.log(`  \x1b[32m${entries.length + 1})\x1b[0m All`);
+  console.log(`\n  \x1b[2mSelect multiple: 1,3 or 1 3\x1b[0m`);
+
+  const defaultChoice = detected.length > 0
+    ? detected.map(d => entries.findIndex(([n]) => n === d) + 1).join(',')
+    : '1';
+  const answer = await prompt(`  Choice [${defaultChoice}]: `);
+
+  const input = answer || defaultChoice;
+  const nums = input.split(/[\s,]+/).map(Number).filter(n => !isNaN(n));
+
+  if (nums.includes(entries.length + 1)) {
+    return entries.map(([name]) => name);
+  }
+
+  const selected = nums
+    .filter(n => n >= 1 && n <= entries.length)
+    .map(n => entries[n - 1][0]);
+
+  if (selected.length === 0) {
+    console.error('No valid targets selected.');
+    process.exit(1);
+  }
+
+  return selected;
 }
 
 const HELP = `
@@ -55,14 +99,13 @@ Downloaded components are stored in ~/.aae/ for persistence across npx runs.
 Examples:
   aae add hsgui/aae                          Add all components from repo
   aae add hsgui/aae/skills/deep-research     Add a specific skill
-  aae add hsgui/aae/skills/deep-research     Add deep-research skill from GitHub
   aae remove skills my-skill                 Remove a skill
   aae list                                   List all local components
   aae link                                   Link everything to detected platforms
   aae link --target claude                   Link only to Claude Code
 `.trim();
 
-async function resolveTargets() {
+async function resolveTargets({ interactive = false } = {}) {
   const explicit = flag('--target');
   if (explicit) {
     if (!TARGETS[explicit]) {
@@ -70,6 +113,9 @@ async function resolveTargets() {
       process.exit(1);
     }
     return [explicit];
+  }
+  if (interactive && process.stdin.isTTY) {
+    return await promptTargets();
   }
   return await detectTargets();
 }
@@ -146,7 +192,7 @@ async function main() {
         process.exitCode = 1;
         break;
       }
-      const targets = await resolveTargets();
+      const targets = await resolveTargets({ interactive: !quiet });
       await runAdd(source, { quiet, targets });
       break;
     }
