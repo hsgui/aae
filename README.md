@@ -4,6 +4,8 @@ Install and manage **skills**, **commands**, **agents**, **hooks**, and **workfl
 
 Compatible with the [Agent Skills](https://agentskills.io) specification — works with any repo that has `SKILL.md` files.
 
+Requires **Node.js >= 18**.
+
 ## Quick Start
 
 ```bash
@@ -13,6 +15,23 @@ npx @hsgui/aae add hsgui/aae/skills/deep-research
 # Install all components from a repo
 npx @hsgui/aae add hsgui/aae
 ```
+
+## Install
+
+Use directly via `npx` (no install needed):
+
+```bash
+npx @hsgui/aae add hsgui/aae/skills/deep-research
+```
+
+Or install globally for the shorter `aae` command:
+
+```bash
+npm install -g @hsgui/aae
+aae add hsgui/aae/skills/deep-research
+```
+
+When installed as a project dependency (`npm install @hsgui/aae`), the postinstall hook automatically runs `aae link` to symlink all bundled components into detected platforms.
 
 ## Install from GitHub
 
@@ -70,6 +89,23 @@ aae link skills my-skill         # link a specific skill
 aae unlink skills my-skill       # unlink (keep files, remove symlink)
 ```
 
+### Command aliases
+
+| Command   | Aliases              |
+|-----------|----------------------|
+| `add`     | `a`, `install`, `i`  |
+| `remove`  | `rm`                 |
+| `list`    | `ls`                 |
+
+### Options
+
+| Flag               | Description                              |
+|--------------------|------------------------------------------|
+| `--target <name>`  | Target a specific platform (`cursor`, `claude`) instead of auto-detect |
+| `--quiet`          | Suppress all output (used by postinstall) |
+
+When running `aae add` in an interactive terminal, you'll be prompted to select which platforms to install for. Use `--target` to skip the prompt.
+
 ## Platform Mapping
 
 Components are symlinked to the right location based on platform:
@@ -124,8 +160,37 @@ Instructions for the agent to follow when this skill is activated.
 ## Programmatic API
 
 ```js
-import { listAll, linkComponent, detectTargets, downloadDir, getStoreRoot } from '@hsgui/aae';
+import {
+  // Registry — discover local components
+  listAll,              // () → { skills: [...], commands: [...], ... }
+  listComponents,       // (type) → [{ name, type, dir, description }]
+  componentExists,      // (type, name) → boolean
+  findComponentDir,     // (type, name) → string | null
+  getRoot,              // () → package root path
+  getStoreRoot,         // () → ~/.aae/ path
+  COMPONENT_TYPES,      // ['skills', 'commands', 'agents', 'hooks', 'workflows']
 
+  // Linker — symlink management
+  linkComponent,        // (type, name, opts?) → [{ target, result }]
+  unlinkComponent,      // (type, name, opts?) → [{ target, result }]
+  linkAll,              // (opts?) → count
+  unlinkAll,            // (opts?) → count
+
+  // Targets — platform detection
+  detectTargets,        // () → ['cursor', 'claude', ...]
+  resolveTargetDir,     // (target, type) → directory path
+  TARGETS,              // { cursor: {...}, claude: {...}, ... }
+
+  // GitHub — download from repos
+  parseSource,          // (source) → { owner, repo, subpath }
+  downloadDir,          // (owner, repo, path, dest) → files[]
+  discoverRemoteComponents, // (owner, repo, subpath?) → [{ name, type, remotePath }]
+} from '@hsgui/aae';
+```
+
+Example usage:
+
+```js
 const targets = await detectTargets();  // ['cursor', 'claude']
 const components = await listAll();
 await linkComponent('skills', 'my-skill', { targets: ['claude'], src: '/path/to/skill' });
