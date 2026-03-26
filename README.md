@@ -12,6 +12,9 @@ Requires **Node.js >= 18**.
 # Install the deep-research skill
 npx @hsgui/aae add hsgui/aae/skills/deep-research
 
+# Install the proposal-review skill
+npx @hsgui/aae add hsgui/aae/skills/proposal-review
+
 # Install all components from a repo
 npx @hsgui/aae add hsgui/aae
 ```
