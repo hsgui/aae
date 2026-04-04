@@ -5,7 +5,7 @@ This is an npm package that manages reusable components (skills, commands, agent
 ## Architecture
 
 - `src/github.mjs` — GitHub API client: parse source strings, download dirs, discover components
-- `src/targets.mjs` — Platform detection and path mapping (cursor ↔ claude)
+- `src/targets.mjs` — Platform detection and path mapping (cursor ↔ claude); `makeTargets(root)` for project-local `.cursor` / `.claude` trees
 - `src/registry.mjs` — Component discovery (scans package dir + ~/.aae/ store, reads metadata)
 - `src/linker.mjs` — Symlink manager (links components into `~/.cursor/` or `~/.claude/`)
 - `bin/aae.js` — CLI entry point
@@ -28,7 +28,7 @@ This is an npm package that manages reusable components (skills, commands, agent
 
 ## CLI commands
 
-- `aae add <owner/repo[/path]>` — Download from GitHub + auto-link
+- `aae add <owner/repo[/path]>` — Download from GitHub + auto-link (`--project`, `--store`, `--target`)
 - `aae remove <type> <name>` — Delete files + unlink
 - `aae list [type]` — List local components
 - `aae link [type] [name]` — Create symlinks to platforms

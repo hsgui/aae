@@ -1,5 +1,5 @@
 import { mkdir, symlink, readlink, unlink, stat } from 'node:fs/promises';
-import { join, resolve, dirname, relative } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 import { getComponentDir, listComponents, COMPONENT_TYPES } from './registry.mjs';
 import { detectTargets, resolveTargetDir, getTargetLabel } from './targets.mjs';
 
@@ -59,14 +59,15 @@ async function unsymlinkSafe(dest, { quiet = false, label = '' } = {}) {
  * @param {string} name - Component name
  * @param {object} opts
  * @param {string} [opts.src] - Explicit source directory (defaults to package component dir)
+ * @param {string} [opts.projectRoot] - If set, symlink under this project root instead of home.
  */
-export async function linkComponent(type, name, { quiet = false, targets, src } = {}) {
+export async function linkComponent(type, name, { quiet = false, targets, src, projectRoot } = {}) {
   const resolvedTargets = targets || await detectTargets();
   const srcPath = src || join(getComponentDir(type), name);
   const results = [];
 
   for (const t of resolvedTargets) {
-    const targetDir = resolveTargetDir(t, type);
+    const targetDir = resolveTargetDir(t, type, { projectRoot });
     if (!targetDir) continue;
 
     await mkdir(targetDir, { recursive: true });
@@ -78,12 +79,12 @@ export async function linkComponent(type, name, { quiet = false, targets, src } 
   return results;
 }
 
-export async function unlinkComponent(type, name, { quiet = false, targets } = {}) {
+export async function unlinkComponent(type, name, { quiet = false, targets, projectRoot } = {}) {
   const resolvedTargets = targets || await detectTargets();
   const results = [];
 
   for (const t of resolvedTargets) {
-    const targetDir = resolveTargetDir(t, type);
+    const targetDir = resolveTargetDir(t, type, { projectRoot });
     if (!targetDir) continue;
 
     const dest = join(targetDir, name);
@@ -94,26 +95,26 @@ export async function unlinkComponent(type, name, { quiet = false, targets } = {
   return results;
 }
 
-export async function linkAll({ quiet = false, targets } = {}) {
+export async function linkAll({ quiet = false, targets, projectRoot, store } = {}) {
   const resolvedTargets = targets || await detectTargets();
   let count = 0;
   for (const type of COMPONENT_TYPES) {
-    const components = await listComponents(type);
+    const components = await listComponents(type, { store });
     for (const c of components) {
-      const results = await linkComponent(type, c.name, { quiet, targets: resolvedTargets, src: c.dir });
+      const results = await linkComponent(type, c.name, { quiet, targets: resolvedTargets, src: c.dir, projectRoot });
       count += results.filter(r => r.result === 'linked').length;
     }
   }
   return count;
 }
 
-export async function unlinkAll({ quiet = false, targets } = {}) {
+export async function unlinkAll({ quiet = false, targets, projectRoot, store } = {}) {
   const resolvedTargets = targets || await detectTargets();
   let count = 0;
   for (const type of COMPONENT_TYPES) {
-    const components = await listComponents(type);
+    const components = await listComponents(type, { store });
     for (const c of components) {
-      const results = await unlinkComponent(type, c.name, { quiet, targets: resolvedTargets });
+      const results = await unlinkComponent(type, c.name, { quiet, targets: resolvedTargets, projectRoot });
       count += results.filter(r => r.result === 'unlinked').length;
     }
   }

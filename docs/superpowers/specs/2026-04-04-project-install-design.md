@@ -1,7 +1,7 @@
 # Project-local install and custom store — design spec
 
 **Date:** 2026-04-04  
-**Status:** Approved (conversation); pending implementation  
+**Status:** Implemented (see `master` / changelog)  
 **Repo:** aae (`@hsgui/aae`)
 
 ## Context

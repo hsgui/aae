@@ -102,12 +102,25 @@ aae unlink skills my-skill       # unlink (keep files, remove symlink)
 
 ### Options
 
-| Flag               | Description                              |
-|--------------------|------------------------------------------|
-| `--target <name>`  | Target a specific platform (`cursor`, `claude`) instead of auto-detect |
-| `--quiet`          | Suppress all output (used by postinstall) |
+| Flag                 | Description |
+|----------------------|-------------|
+| `--target <names>`   | One or more of `cursor`, `claude`, `claude-internal` (comma-separated). Skips auto-detect and interactive prompts. |
+| `--project <path>`   | Symlink into `<path>/.cursor/...` and `<path>/.claude/...` (same layout as `~`). Paths are relative to the current working directory. Missing directories are created. With `--project`, you must pass `--target` when not in an interactive terminal or when using `--quiet`. |
+| `--store <path>`     | For this command only, use `<path>` as the download store instead of `~/.aae`. Affects `add`, `remove`, `list`, `link`, and `unlink`. Bundled package components are still discovered. |
+| `--quiet`            | Suppress output (used by `postinstall`). |
 
-When running `aae add` in an interactive terminal, you'll be prompted to select which platforms to install for. Use `--target` to skip the prompt.
+In an interactive terminal (without `--quiet`), if you omit `--target`, you’ll be prompted to choose platform(s). Use `--target` to skip the prompt.
+
+### Project-local symlinks
+
+Install into a repo’s `.cursor` / `.claude` trees so the skill is scoped to that project (Cursor / Claude Code still load project-level config when opened from that folder):
+
+```bash
+aae add hsgui/aae/skills/deep-research --project . --target cursor
+aae link --project . --target cursor,claude
+```
+
+Use `--store ./vendor/aae` (for example) to keep downloads next to the repo instead of under `~/.aae`.
 
 ## Platform Mapping
 
@@ -124,7 +137,7 @@ Components are symlinked to the right location based on platform:
 ## Storage
 
 - **Bundled components**: included in the package itself (e.g. `skills/deep-research/`)
-- **Downloaded components** (`aae add`): saved to `~/.aae/<type>/<name>/` — persists across `npx` runs
+- **Downloaded components** (`aae add`): by default saved to `~/.aae/<type>/<name>/` — persists across `npx` runs. Override per command with `--store <path>`.
 - Both sources are merged when listing and linking
 
 ## Project Structure
@@ -165,24 +178,26 @@ Instructions for the agent to follow when this skill is activated.
 ```js
 import {
   // Registry — discover local components
-  listAll,              // () → { skills: [...], commands: [...], ... }
-  listComponents,       // (type) → [{ name, type, dir, description }]
-  componentExists,      // (type, name) → boolean
-  findComponentDir,     // (type, name) → string | null
+  listAll,              // ({ store }?) → { skills: [...], ... }
+  listComponents,       // (type, { store }?) → [{ name, type, dir, description }]
+  componentExists,      // (type, name, { store }?) → boolean
+  findComponentDir,     // (type, name, { store }?) → string | null
   getRoot,              // () → package root path
-  getStoreRoot,         // () → ~/.aae/ path
+  getStoreRoot,         // ({ store }?) → effective store root (default ~/.aae)
   COMPONENT_TYPES,      // ['skills', 'commands', 'agents', 'hooks', 'workflows']
 
   // Linker — symlink management
-  linkComponent,        // (type, name, opts?) → [{ target, result }]
-  unlinkComponent,      // (type, name, opts?) → [{ target, result }]
-  linkAll,              // (opts?) → count
-  unlinkAll,            // (opts?) → count
+  linkComponent,        // (type, name, { targets, src, projectRoot, quiet }?) → [...]
+  unlinkComponent,      // (type, name, { targets, projectRoot, quiet }?) → [...]
+  linkAll,              // ({ targets, projectRoot, store, quiet }?) → count
+  unlinkAll,            // ({ targets, projectRoot, store, quiet }?) → count
 
   // Targets — platform detection
   detectTargets,        // () → ['cursor', 'claude', ...]
-  resolveTargetDir,     // (target, type) → directory path
-  TARGETS,              // { cursor: {...}, claude: {...}, ... }
+  resolveTargetDir,     // (target, type, { projectRoot }?) → directory path
+  makeTargets,          // (root) → target map for any root (home or project)
+  getTargetsForRoot,    // alias of makeTargets
+  TARGETS,              // { cursor: {...}, claude: {...}, ... } (home-based)
 
   // GitHub — download from repos
   parseSource,          // (source) → { owner, repo, subpath }
@@ -195,8 +210,12 @@ Example usage:
 
 ```js
 const targets = await detectTargets();  // ['cursor', 'claude']
-const components = await listAll();
-await linkComponent('skills', 'my-skill', { targets: ['claude'], src: '/path/to/skill' });
+const components = await listAll({ store: '/custom/aae-store' });
+await linkComponent('skills', 'my-skill', {
+  targets: ['claude'],
+  src: '/path/to/skill',
+  projectRoot: '/path/to/repo', // optional: .cursor / .claude under repo
+});
 ```
 
 ## Acknowledgements

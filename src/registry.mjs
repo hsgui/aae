@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, '..');
-const STORE_ROOT = join(homedir(), '.aae');
+const DEFAULT_STORE_ROOT = join(homedir(), '.aae');
 
 const COMPONENT_TYPES = ['skills', 'commands', 'agents', 'hooks', 'workflows'];
 
@@ -13,8 +13,13 @@ export function getRoot() {
   return PACKAGE_ROOT;
 }
 
-export function getStoreRoot() {
-  return STORE_ROOT;
+/**
+ * Effective store root for this invocation. Replaces ~/.aae when `store` is set.
+ * @param {object} [opts]
+ * @param {string} [opts.store] - Absolute or cwd-relative path (resolved with path.resolve).
+ */
+export function getStoreRoot({ store } = {}) {
+  return store ? resolve(store) : DEFAULT_STORE_ROOT;
 }
 
 export function getComponentDir(type) {
@@ -22,9 +27,9 @@ export function getComponentDir(type) {
   return join(PACKAGE_ROOT, type);
 }
 
-export function getStoreComponentDir(type) {
+export function getStoreComponentDir(type, { store } = {}) {
   validateType(type);
-  return join(STORE_ROOT, type);
+  return join(getStoreRoot({ store }), type);
 }
 
 function validateType(type) {
@@ -33,8 +38,8 @@ function validateType(type) {
   }
 }
 
-export async function findComponentDir(type, name) {
-  for (const base of [getStoreComponentDir(type), getComponentDir(type)]) {
+export async function findComponentDir(type, name, { store } = {}) {
+  for (const base of [getStoreComponentDir(type, { store }), getComponentDir(type)]) {
     const dir = join(base, name);
     try {
       const s = await stat(dir);
@@ -44,9 +49,9 @@ export async function findComponentDir(type, name) {
   return null;
 }
 
-export async function listComponents(type) {
+export async function listComponents(type, { store } = {}) {
   validateType(type);
-  const bases = [getComponentDir(type), getStoreComponentDir(type)];
+  const bases = [getComponentDir(type), getStoreComponentDir(type, { store })];
   const seen = new Set();
   const components = [];
 
@@ -66,10 +71,10 @@ export async function listComponents(type) {
   return components;
 }
 
-export async function listAll() {
+export async function listAll({ store } = {}) {
   const all = {};
   for (const type of COMPONENT_TYPES) {
-    all[type] = await listComponents(type);
+    all[type] = await listComponents(type, { store });
   }
   return all;
 }
@@ -127,8 +132,8 @@ function parseFrontmatter(raw) {
   return result;
 }
 
-export async function componentExists(type, name) {
-  return (await findComponentDir(type, name)) !== null;
+export async function componentExists(type, name, { store } = {}) {
+  return (await findComponentDir(type, name, { store })) !== null;
 }
 
 export { COMPONENT_TYPES };

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { mkdir, rm } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
-import { listAll, listComponents, COMPONENT_TYPES, getRoot, getStoreRoot, findComponentDir } from '../src/registry.mjs';
+import { listAll, listComponents, COMPONENT_TYPES, getStoreRoot, findComponentDir } from '../src/registry.mjs';
 import { linkComponent, unlinkComponent, linkAll, unlinkAll } from '../src/linker.mjs';
-import { detectTargets, getTargetLabel, TARGETS } from '../src/targets.mjs';
+import { detectTargets, getTargetLabel, TARGETS, makeTargets } from '../src/targets.mjs';
 import { parseSource, discoverRemoteComponents, downloadDir } from '../src/github.mjs';
 
 const argv = process.argv.slice(2);
@@ -20,24 +20,47 @@ function flag(name) {
 
 function prompt(question) {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise(resolve => {
-    rl.question(question, answer => { rl.close(); resolve(answer.trim()); });
+  return new Promise(resolveAns => {
+    rl.question(question, answer => { rl.close(); resolveAns(answer.trim()); });
   });
 }
 
-async function promptTargets() {
-  const entries = Object.entries(TARGETS);
-  const detected = await detectTargets();
+/**
+ * @param {string | undefined} raw
+ * @returns {string[] | null}
+ */
+function parseTargetNames(raw) {
+  if (raw == null || raw === '') return null;
+  const names = raw.split(',').map(s => s.trim()).filter(Boolean);
+  if (names.length === 0) return null;
+  for (const n of names) {
+    if (!TARGETS[n]) {
+      console.error(`Unknown target: ${n}. Available: ${Object.keys(TARGETS).join(', ')}`);
+      process.exit(1);
+    }
+  }
+  return names;
+}
+
+/**
+ * @param {Record<string, { label: string, configDir: string }>} targetsMap
+ * @param {{ projectMode?: boolean }} [opts]
+ */
+async function promptTargets(targetsMap, { projectMode = false } = {}) {
+  const entries = Object.entries(targetsMap);
+  const detected = projectMode ? [] : await detectTargets();
 
   console.log('\n\x1b[33mWhich target(s) would you like to install for?\x1b[0m\n');
   entries.forEach(([name, target], i) => {
-    const installed = detected.includes(name) ? '' : ' \x1b[2m(not detected)\x1b[0m';
-    console.log(`  \x1b[32m${i + 1})\x1b[0m ${target.label.padEnd(24)} \x1b[2m(${target.configDir})\x1b[0m${installed}`);
+    const suffix = projectMode
+      ? ''
+      : (detected.includes(name) ? '' : ' \x1b[2m(not detected)\x1b[0m');
+    console.log(`  \x1b[32m${i + 1})\x1b[0m ${target.label.padEnd(24)} \x1b[2m(${target.configDir})\x1b[0m${suffix}`);
   });
   console.log(`  \x1b[32m${entries.length + 1})\x1b[0m All`);
   console.log(`\n  \x1b[2mSelect multiple: 1,3 or 1 3\x1b[0m`);
 
-  const defaultChoice = detected.length > 0
+  const defaultChoice = !projectMode && detected.length > 0
     ? detected.map(d => entries.findIndex(([n]) => n === d) + 1).join(',')
     : '1';
   const answer = await prompt(`  Choice [${defaultChoice}]: `);
@@ -61,6 +84,28 @@ async function promptTargets() {
   return selected;
 }
 
+/**
+ * @param {{ interactive?: boolean, projectRoot?: string | null, quiet?: boolean }} opts
+ */
+async function resolveTargets({ interactive = false, projectRoot = null, quiet = false } = {}) {
+  const explicitList = parseTargetNames(flag('--target'));
+  if (explicitList) return explicitList;
+
+  if (projectRoot != null) {
+    if (interactive && process.stdin.isTTY && !quiet) {
+      const map = makeTargets(projectRoot);
+      return await promptTargets(map, { projectMode: true });
+    }
+    console.error('aae: --target is required when using --project without an interactive terminal, or when using --quiet.');
+    process.exit(1);
+  }
+
+  if (interactive && process.stdin.isTTY && !quiet) {
+    return await promptTargets(TARGETS, { projectMode: false });
+  }
+  return await detectTargets();
+}
+
 const HELP = `
 aae — AI Agent Engineering
 
@@ -74,7 +119,9 @@ Usage:
   aae help                         Show this help
 
 Options:
-  --target <cursor|claude>         Target a specific platform (default: auto-detect)
+  --target <names>                 One or more of: cursor, claude, claude-internal (comma-separated)
+  --project <path>                 Symlink under <path>/.cursor and/or <path>/.claude (requires --target when non-interactive or with --quiet)
+  --store <path>                   Store downloads under <path> instead of ~/.aae (per command)
   --quiet                          Suppress output
 
 Source formats:
@@ -94,33 +141,19 @@ Component ↔ Platform mapping:
   workflows/   → Cursor (~/.cursor/workflows/) + Claude (~/.claude/commands/)
 
 Supports repos with SKILL.md files at root level (Agent Skills format).
-Downloaded components are stored in ~/.aae/ for persistence across npx runs.
+By default, downloaded components are stored in ~/.aae/; use --store to override.
 
 Examples:
   aae add hsgui/aae                          Add all components from repo
   aae add hsgui/aae/skills/deep-research     Add a specific skill
+  aae add hsgui/aae --project . --target cursor
   aae remove skills my-skill                 Remove a skill
   aae list                                   List all local components
   aae link                                   Link everything to detected platforms
   aae link --target claude                   Link only to Claude Code
 `.trim();
 
-async function resolveTargets({ interactive = false } = {}) {
-  const explicit = flag('--target');
-  if (explicit) {
-    if (!TARGETS[explicit]) {
-      console.error(`Unknown target: ${explicit}. Available: ${Object.keys(TARGETS).join(', ')}`);
-      process.exit(1);
-    }
-    return [explicit];
-  }
-  if (interactive && process.stdin.isTTY) {
-    return await promptTargets();
-  }
-  return await detectTargets();
-}
-
-async function runAdd(source, { quiet, targets }) {
+async function runAdd(source, { quiet, targets, projectRoot, store }) {
   const { owner, repo, subpath } = parseSource(source);
   if (!quiet) console.log(`\nFetching from ${owner}/${repo}${subpath ? '/' + subpath : ''}...\n`);
 
@@ -131,12 +164,12 @@ async function runAdd(source, { quiet, targets }) {
     return;
   }
 
-  const store = getStoreRoot();
+  const storeRoot = getStoreRoot({ store });
   let added = 0;
 
   for (const comp of components) {
     const type = comp.type || 'skills';
-    const destDir = join(store, type, comp.name);
+    const destDir = join(storeRoot, type, comp.name);
 
     // Clean destination before downloading
     await rm(destDir, { recursive: true, force: true }).catch(() => {});
@@ -146,7 +179,7 @@ async function runAdd(source, { quiet, targets }) {
     const files = await downloadDir(owner, repo, comp.remotePath, destDir);
     if (!quiet) console.log(`    ${files.length} file(s) → ${destDir}`);
 
-    const results = await linkComponent(type, comp.name, { quiet, targets, src: destDir });
+    const results = await linkComponent(type, comp.name, { quiet, targets, src: destDir, projectRoot });
     const linked = results.filter(r => r.result === 'linked' || r.result === 'already');
     if (!quiet && linked.length > 0) {
       for (const r of results) {
@@ -159,15 +192,15 @@ async function runAdd(source, { quiet, targets }) {
   if (!quiet) console.log(`\nDone. ${added} component(s) added.\n`);
 }
 
-async function runRemove(type, name, { quiet, targets }) {
-  const compDir = await findComponentDir(type, name);
+async function runRemove(type, name, { quiet, targets, projectRoot, store }) {
+  const compDir = await findComponentDir(type, name, { store });
 
   if (!compDir) {
     console.error(`  ✗ ${type}/${name} not found`);
     return;
   }
 
-  await unlinkComponent(type, name, { quiet, targets });
+  await unlinkComponent(type, name, { quiet, targets, projectRoot });
 
   try {
     await rm(compDir, { recursive: true, force: true });
@@ -179,7 +212,38 @@ async function runRemove(type, name, { quiet, targets }) {
 
 async function main() {
   const quiet = args.includes('--quiet');
-  const positional = args.filter(a => !a.startsWith('-') && a !== flag('--target'));
+
+  if (args.includes('--project')) {
+    const p = flag('--project');
+    if (p == null || p === '' || p.startsWith('-')) {
+      console.error('aae: --project requires a path argument.');
+      process.exit(1);
+    }
+  }
+  if (args.includes('--store')) {
+    const s = flag('--store');
+    if (s == null || s === '' || s.startsWith('-')) {
+      console.error('aae: --store requires a path argument.');
+      process.exit(1);
+    }
+  }
+
+  const targetVal = flag('--target');
+  const projectVal = flag('--project');
+  const storeVal = flag('--store');
+  const positional = args.filter(a =>
+    !a.startsWith('-') &&
+    a !== targetVal &&
+    a !== projectVal &&
+    a !== storeVal
+  );
+
+  const projectRoot = projectVal != null ? resolve(process.cwd(), projectVal) : null;
+  const store = storeVal != null ? resolve(process.cwd(), storeVal) : undefined;
+
+  async function targetsForCmd() {
+    return resolveTargets({ interactive: !quiet, projectRoot, quiet });
+  }
 
   switch (command) {
     case 'add':
@@ -192,8 +256,8 @@ async function main() {
         process.exitCode = 1;
         break;
       }
-      const targets = await resolveTargets({ interactive: !quiet });
-      await runAdd(source, { quiet, targets });
+      const targets = await targetsForCmd();
+      await runAdd(source, { quiet, targets, projectRoot, store });
       break;
     }
 
@@ -204,8 +268,8 @@ async function main() {
         process.exitCode = 1;
         break;
       }
-      const targets = await resolveTargets();
-      await runRemove(positional[0], positional[1], { quiet, targets });
+      const targets = await targetsForCmd();
+      await runRemove(positional[0], positional[1], { quiet, targets, projectRoot, store });
       break;
     }
 
@@ -213,7 +277,7 @@ async function main() {
     case 'ls': {
       const [type] = positional;
       if (type) {
-        const items = await listComponents(type);
+        const items = await listComponents(type, { store });
         if (items.length === 0) {
           console.log(`No ${type} found.`);
         } else {
@@ -224,12 +288,12 @@ async function main() {
           console.log();
         }
       } else {
-        const all = await listAll();
+        const all = await listAll({ store });
         let total = 0;
-        for (const [type, items] of Object.entries(all)) {
+        for (const [t, items] of Object.entries(all)) {
           total += items.length;
           if (items.length > 0) {
-            console.log(`\n${type} (${items.length}):`);
+            console.log(`\n${t} (${items.length}):`);
             for (const item of items) {
               console.log(`  ${item.name}${item.description ? ' — ' + item.description : ''}`);
             }
@@ -242,37 +306,37 @@ async function main() {
     }
 
     case 'link': {
-      const targets = await resolveTargets();
+      const targets = await targetsForCmd();
       if (!quiet) console.log(`Targets: ${targets.map(getTargetLabel).join(', ')}\n`);
 
       if (positional.length >= 2) {
-        const src = await findComponentDir(positional[0], positional[1]);
-        await linkComponent(positional[0], positional[1], { quiet, targets, src });
+        const src = await findComponentDir(positional[0], positional[1], { store });
+        await linkComponent(positional[0], positional[1], { quiet, targets, src, projectRoot });
       } else if (positional.length === 1) {
-        const items = await listComponents(positional[0]);
+        const items = await listComponents(positional[0], { store });
         for (const item of items) {
-          await linkComponent(positional[0], item.name, { quiet, targets, src: item.dir });
+          await linkComponent(positional[0], item.name, { quiet, targets, src: item.dir, projectRoot });
         }
       } else {
-        const count = await linkAll({ quiet, targets });
+        const count = await linkAll({ quiet, targets, projectRoot, store });
         if (!quiet) console.log(`\nDone. ${count} component(s) linked.`);
       }
       break;
     }
 
     case 'unlink': {
-      const targets = await resolveTargets();
+      const targets = await targetsForCmd();
       if (!quiet) console.log(`Targets: ${targets.map(getTargetLabel).join(', ')}\n`);
 
       if (positional.length >= 2) {
-        await unlinkComponent(positional[0], positional[1], { quiet, targets });
+        await unlinkComponent(positional[0], positional[1], { quiet, targets, projectRoot });
       } else if (positional.length === 1) {
-        const items = await listComponents(positional[0]);
+        const items = await listComponents(positional[0], { store });
         for (const item of items) {
-          await unlinkComponent(positional[0], item.name, { quiet, targets });
+          await unlinkComponent(positional[0], item.name, { quiet, targets, projectRoot });
         }
       } else {
-        const count = await unlinkAll({ quiet, targets });
+        const count = await unlinkAll({ quiet, targets, projectRoot, store });
         if (!quiet) console.log(`\nDone. ${count} component(s) unlinked.`);
       }
       break;
