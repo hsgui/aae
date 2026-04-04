@@ -1,87 +1,179 @@
 ---
 name: md2wechat-best-practices
 description: >-
-  Best practices for WeChat Official Account articles when using the md2wechat
-  workflow—mobile-first layout (cards vs cramped tables), opening hook structure,
-  vertical setting rows, link handling, and table CSS. Use when converting or
-  drafting Markdown for 微信公众号 with md2wechat, fixing phone layout, replacing
-  multi-column tables with cards, or when the user mentions md2wechat together with
-  排版、表格、手机端、外链、GitHub. Prefer md2wechat convert with --mode ai when
-  applying these practices. Chinese triggers：微信公众号排版、md2wechat、表格改卡片、外链明文。
+  Best practices for md2wechat on WeChat Official Accounts: API vs AI mode,
+  inspect → upload_image → HTML → create_draft JSON, DUPLICATE_H1 fixes, and
+  WeChat-safe HTML (inline CSS, mmbiz URLs, <br/> inside pre, card layout instead
+  of tables, URL as span, spacing). Use when publishing 公众号 drafts, running
+  inspect --strict, assembling draft.json, or tuning mobile layout. Pair with
+  the md2wechat skill for CLI details. Chinese triggers：md2wechat 最佳实践、草稿上传、
+  DUPLICATE_H1、公众号 HTML、表格改卡片。
 ---
 
-# MD2WeChat — WeChat MP layout best practices
+# MD2WeChat — WeChat MP best practices
 
-Use this skill **together with** the **md2wechat** skill. When the user wants these layout rules applied, run conversion (or regenerate HTML) with **AI mode**:
+Use **with** the **md2wechat** skill for flags, config discovery (`capabilities --json`), themes, and writers. This file is **field-guide** content for **公众号** publishing and **AI-mode / hand-built HTML** quality.
 
-```bash
-md2wechat convert <article.md> --mode ai --preview
+## 1. Conversion mode
+
+### API mode (`--mode api`)
+
+- Needs an **md2wechat API key** (e.g. **¥129** tier — confirm current price and purchase via [md2wechat.com/contact](https://md2wechat.com/contact)).
+- Set **`api.md2wechat_key`** in `~/.config/md2wechat/config.yaml` (see md2wechat skill for full config order).
+
+### AI mode (`--mode ai`)
+
+- **No** md2wechat API key for conversion itself; CLI often returns **`action_required`** — **you or the Agent** produce **WeChat-compatible HTML**, then upload via **`create_draft`**.
+- Use when there is **no API key**, or when you need **fully custom** layout (e.g. card stacks, spacing tuned for phones).
+
+**Markdown content habits** (both modes where applicable): opening **问题 → 方案 → 读完收获** with real bullets; settings as **名称 → 值 → 说明** vertical stacks; tool lists with **必装 / 推荐 / 可选** tags — see §7.
+
+## 2. AI mode — end-to-end draft workflow
+
+```text
+1. md2wechat inspect article.md --draft --cover cover.png --json
+   → validate metadata, images, draft readiness
+
+2. md2wechat upload_image cover.png --json
+   md2wechat upload_image inline-image.png --json
+   → upload each asset; collect wechat_url and media_id
+
+3. Generate HTML yourself (or via Agent): replace image src with wechat URLs from step 2
+
+4. Build draft JSON (§3)
+
+5. md2wechat create_draft draft.json --json
+   → upload draft to the Official Account
+
+6. In WeChat backend: open draft → preview on phone → publish when satisfied
 ```
 
-Add `--theme <name>` if the user already chose a theme. **Do not** assume API-only conversion will implement card layouts or custom CSS; **AI mode** is where themed prompts steer the model toward the patterns below.
+Optional: **`md2wechat convert article.md --mode ai --preview`** (and `--theme`) to pull **themed prompts** for an external model — still ends in **HTML you control** before `create_draft` if you use that path.
 
-## Goals (mobile first)
+## 3. `create_draft` JSON shape
 
-WeChat readers are mostly on phones. **Three-column tables** become unreadable when squeezed. Prioritize **vertical stacking**, **scannable openings**, and **copy-friendly URLs**.
+```json
+{
+  "articles": [{
+    "title": "文章标题",
+    "author": "",
+    "digest": "摘要（最多120字）",
+    "thumb_media_id": "封面图的 media_id（upload_image 返回）",
+    "content_source_url": "",
+    "need_open_comment": 0,
+    "only_fans_can_comment": 0,
+    "content": "<div>...完整 HTML...</div>"
+  }]
+}
+```
 
-## 1. Article opening — 问题 → 方案 → 读完收获
+## 4. `DUPLICATE_H1` (`inspect --strict`)
 
-Structure the **first three blocks** (before the main body) so readers decide in seconds whether to scroll:
+**Symptom**: `DUPLICATE_H1: Body H1 matches the final article title`.
 
-1. **问题** — What pain or question the article addresses (short paragraph or lead).
-2. **方案** — What approach or tool stack you use (short).
-3. **读完收获** — Bullet list of concrete takeaways (“读完后你能…”).
+**Cause**: md2wechat derives the article title from **frontmatter `title`** and/or the **first body `#`**. If both exist and match, it flags duplicate.
 
-Use real bullets (`-` / `*`) in Markdown so they survive conversion and stay scannable on mobile.
+**Fix (pick one)**:
 
-## 2. Tables → card layout (default preference)
+- **Recommended**: set **`title`** in frontmatter, then **remove** the same line as **`# title`** from the body.
+- Or: **omit** frontmatter `title` and keep a single **`#`** title in the body.
 
-**Prefer not** to ship wide comparison tables for phone readers. Instead:
+## 5. WeChat HTML — hard rules
 
-- **One card per row of information**: stack blocks vertically; each card holds one logical item (e.g. one tool, one setting group, one step).
-- **Rounded card look** in HTML/CSS: use the AI prompt output to apply consistent padding, border-radius, and spacing between cards (follow the active md2wechat theme).
-- **Tool / software lists**: tag each entry with priority labels the reader can scan quickly, e.g. **必装** / **推荐** / **可选** (use a single label per item, or a clear legend once at the top).
+1. **Inline CSS only** — no `<style>` blocks, no external stylesheets.
+2. **Every `<p>` needs explicit `color`** — the client resets color otherwise.
+3. **Outer wrapper** — use a root `<div>` for background, font-family, base font-size if needed.
+4. **Images** — `src` must be **WeChat CDN** (`mmbiz.qpic.cn` …). Local or remote files go through **`upload_image`** first; use returned URLs in HTML.
+5. **Generally safe tags** (still validate against current WeChat docs): `p`, `br`, `strong`, `em`, `a`, `h1`–`h6`, `ul`, `ol`, `li`, `blockquote`, `pre`, `code`, `table`, `section`, `span`, `img`.
+6. **Avoid**: `script`, `iframe`, `form`, and **`position: fixed` / `absolute`** in CSS.
 
-When a table is unavoidable, still **minimize columns** and keep **one primary idea per row**.
+## 6. HTML pitfalls (mobile + WeChat renderer)
 
-## 3. Settings and key-value content — 名称 → 值 → 说明
+### 6.1 Code blocks — newlines lost in `<pre><code>`
 
-For configuration, options, or “field / meaning” content, use **three lines per item**, stacked vertically inside a card (or block):
+WeChat may **ignore `\n`** inside `<pre>`, collapsing lines.
 
-1. **名称** — setting or field name  
-2. **值** — current value, default, or recommended value  
-3. **说明** — one or two lines of context  
+**Fix**: use **`<br/>`** instead of raw newlines inside the code string:
 
-Avoid cramming name + value + long text into a single table cell.
+```html
+<pre><code>raw/    ← 原料<br/>wiki/   ← 编译结果<br/>outputs/ ← 产出</code></pre>
+```
 
-## 4. When tables remain — avoid ugly line breaks
+### 6.2 Tables on phone — prefer cards, not `<table>`
 
-If the generated HTML still uses `<table>`:
+**Symptom**: ~375px width, three columns ≈ ~100px each; Chinese breaks **per character** (“原 料 区”).
 
-- Set **`table-layout: auto`** on the table so columns can size from content.
-- For **short text columns** (分区名、工具名、文件夹名、命令名等), apply **`white-space: nowrap`** so Chinese is not broken **character-by-character** across lines.
-- **First column copy**: shorten labels (e.g. “Obsidian Web Clipper” → “Web Clipper”) so the narrow column does not force bad wrapping.
+**Fix**: **do not rely on `<table>`** for main content. Use **stacked `<section>` cards** — one block per row of information (tools, settings, steps).
 
-## 5. External links — show full URL as plain text
+Example pattern:
 
-WeChat Official Accounts **do not** behave like a normal browser for external links. Treat links as **non-clickable, copy-friendly plaintext**:
+```html
+<section style="background:#f5f0e8;border-radius:8px;padding:14px 16px;margin:8px 0;">
+  <p style="margin:0 0 4px;color:#3b3b3b;">
+    <strong style="color:#d4a574;">原料区</strong>
+    <code style="...">raw/</code>
+  </p>
+  <p style="color:#3b3b3b;font-size:15px;margin:0 0 12px;">
+    你的「源代码」—— 剪藏、论文、原始笔记
+  </p>
+</section>
+```
 
-- Replace clickable `<a href="...">` wrappers for repo and doc URLs with **`<span>` (or plain text)** showing the **full URL** string.
-- Examples of acceptable display forms: `github.com/hsgui/aae`, `github.com/hsgui/aae/blob/master/README.md` — reader can **long-press / select / copy**.
-- Keep the same rule for other external destinations unless the user explicitly needs a different policy for a specific campaign.
+Priority chips (tools):
 
-## 6. Agent checklist (before handing off to md2wechat)
+```html
+<span style="background:#d4a574;color:#fff;font-size:12px;padding:2px 8px;border-radius:10px;">必装</span>
+```
 
-Copy mentally or into a short note:
+**Last resort** if a table must exist: `table-layout: auto`; short label columns with `white-space: nowrap`; shorten first-column text (e.g. “Web Clipper” not the full product sentence).
 
-- [ ] Opening follows **问题 → 方案 → 读完收获** with a **bullet** takeaway list.
-- [ ] Multi-column Markdown tables **replaced or redesigned** as **vertical cards** where possible; tool rows use **必装 / 推荐 / 可选** when relevant.
-- [ ] Settings use **名称 → 值 → 说明** stacks, not dense grid cells.
-- [ ] Any remaining tables: **`table-layout: auto`**, **`nowrap`** on short identifier columns, **short first-column labels**.
-- [ ] GitHub and external repo/doc URLs: **full URL visible**, **not** relied upon as working hyperlinks inside the MP viewer.
-- [ ] Conversion path uses **`md2wechat convert … --mode ai`** so the theme/prompt pipeline can encode the above.
+### 6.3 External links not clickable
 
-## Coordination with md2wechat
+`<a href="https://...">` often **does not navigate** like a normal browser.
 
-- For CLI flags, config paths, themes, and `capabilities --json`, follow the **md2wechat** skill.
-- This skill does **not** replace md2wechat; it constrains **content shape** and **HTML/CSS expectations** for 公众号 mobile reading.
+**Fix**: show **full URL as plaintext** in a `<span>` (copy-friendly):
+
+```html
+<span style="color:#576b95;">github.com/hsgui/aae</span>
+```
+
+### 6.4 Spacing — workable defaults (tune per theme)
+
+| Element | Suggested margin / padding |
+|---------|-----------------------------|
+| Section divider block | `margin: 14px 0 10px` |
+| `h2` | `margin: 14px 0 8px` |
+| Between card `<section>`s | `margin: 8px 0` |
+| Body `<p>` bottom | `margin-bottom: 12px` (plus explicit `color`) |
+| `blockquote` | `margin: 8px 0` |
+| Card inner padding | `padding: 14px 16px` |
+
+## 7. Markdown content structure (before HTML)
+
+- **Opening**: **问题 → 方案 → 读完收获** with `-` / `*` bullets for takeaways.
+- **Settings**: per item, **名称 → 值 → 说明** (three lines), not one cramped table cell.
+- **Tools**: label **必装 / 推荐 / 可选** where it helps scanning.
+
+## 8. Quick command cheat sheet
+
+```bash
+# Validate article + draft metadata
+md2wechat inspect article.md --draft --cover cover.png --json
+
+# Upload images (cover + inline)
+md2wechat upload_image cover.png --json
+md2wechat upload_image diagram.png --json
+
+# Build HTML (Agent or manual) → wrap in draft.json → upload
+md2wechat create_draft draft.json --json
+```
+
+## 9. Agent checklist
+
+- [ ] Chose **API** (key in config) vs **AI** (`action_required` + custom HTML + **`create_draft`**).
+- [ ] Ran **`inspect … --json`**; resolved **`DUPLICATE_H1`** if `--strict` complains.
+- [ ] Every image: **`upload_image`**, HTML uses **mmbiz** URLs.
+- [ ] **`draft.json`** matches §3; **`digest` ≤ 120** chars; **`thumb_media_id`** from cover upload.
+- [ ] HTML: **inline styles**, **`color` on `<p>`**, **`<br/>` in `<pre><code>`** if needed.
+- [ ] **No layout tables** for phone-heavy content — **card `<section>`s**; links as **`<span>` URLs** where needed.
+- [ ] Spacing roughly follows §6.4; preview on **real phone** in draft box before publish.
