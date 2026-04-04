@@ -122,6 +122,26 @@ aae link --project . --target cursor,claude
 
 Use `--store ./vendor/aae` (for example) to keep downloads next to the repo instead of under `~/.aae`.
 
+### LLM Knowledge Bases (`llm-kb-*` skills)
+
+Three bundled skills support a personal knowledge-base workflow aligned with Andrej Karpathy’s **LLM Knowledge Bases** thread on X: index sources into `raw/`, have an LLM incrementally compile a linked markdown `wiki/`, browse everything in Obsidian, ask complex questions and file answers (and slides, figures) back into the vault, and run LLM “health checks” to improve consistency and coverage — with the wiki mostly maintained by the agent, not by hand.
+
+| Skill | Role |
+|-------|------|
+| `llm-kb-compile` | Compile `raw/` into a structured `wiki/` (summaries, backlinks, concept articles). |
+| `llm-kb-health-lint` | Knowledge-base quality passes — consistency, gaps, connections, optional web imputation. |
+| `llm-kb-research-file` | Answer complex questions via the wiki index; write markdown, Marp, matplotlib, etc., and file outputs back into the KB. |
+
+Install them into **your knowledge-base repo** with project-local symlinks (replace `your-llm-kb` with the repo root, or use `.` from inside that folder):
+
+```bash
+npx @hsgui/aae add hsgui/aae/skills/llm-kb-compile --project your-llm-kb --target cursor,claude
+npx @hsgui/aae add hsgui/aae/skills/llm-kb-health-lint --project your-llm-kb --target cursor,claude
+npx @hsgui/aae add hsgui/aae/skills/llm-kb-research-file --project your-llm-kb --target cursor,claude
+```
+
+With `aae` installed globally, the same paths work as `aae add hsgui/aae/skills/llm-kb-compile ...`. See [Project-local symlinks](#project-local-symlinks) for `--project` / `--target` behavior.
+
 ## Platform Mapping
 
 Components are symlinked to the right location based on platform:

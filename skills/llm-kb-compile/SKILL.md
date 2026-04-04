@@ -1,9 +1,9 @@
 ---
-name: wiki-compile
+name: llm-kb-compile
 description: Incrementally compile a raw/ directory of markdown source files into a structured wiki/ knowledge base. Use when the user wants to build or update a wiki from raw notes, generate concept articles, add backlinks, create summaries, or maintain a personal knowledge base in the style of Karpathy's LLM Knowledge Bases workflow.
 ---
 
-# Wiki Compile
+# LLM KB — Compile
 
 Compiles a `raw/` directory of collected markdown notes/clippings into a structured `wiki/` knowledge base with summaries, concept articles, and cross-linked backlinks.
 

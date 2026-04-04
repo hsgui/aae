@@ -1,9 +1,9 @@
 ---
-name: wiki-health-lint
+name: llm-kb-health-lint
 description: Runs LLM-driven wiki health checks—consistency, completeness, orphan/island detection, missing-data gaps with optional web verification/imputation, connection discovery, and new article candidates—writes structured reports to outputs/health/ and suggests follow-up questions. Use when the user wants wiki linting, quality audits, data integrity passes, or incremental cleanup aligned with Karpathy-style “health checks”. Chinese triggers 知识库健康检查、wiki 审查、一致性、孤岛、补全、质量报告.
 ---
 
-# Wiki Health Lint
+# LLM KB — Health Lint
 
 Periodic **lint + CI** for `wiki/`: find inconsistencies, surface missing information (optionally filled via **web search** with explicit provenance), spot weak linkage (“islands”), propose new links and **article candidates**, and archive a **traceable report**. Conceptual match: `wiki/concepts/知识库健康检查.md`.
 
@@ -52,7 +52,7 @@ created: <YYYY-MM-DD>
 scope: <full wiki | list of paths>
 ---
 
-# Wiki health report
+# LLM KB health report
 
 ## Executive summary
 - <3–6 bullets: severity, main themes>
@@ -94,11 +94,11 @@ Add a line under **`wiki/index.md`** (e.g. new **## Health reports** or **## Mai
 
 ## Coordination with other skills
 
-- **wiki-compile** — Ingestion from `raw/`; health lint does **not** replace compile. If fixes should become durable “sources”, consider adding or updating `raw/` and re-running compile per user intent.
-- **wiki-research-file** — Deep dives on a single follow-up question; health lint produces **many** shallow findings + a backlog.
+- **llm-kb-compile** — Ingestion from `raw/`; health lint does **not** replace compile. If fixes should become durable “sources”, consider adding or updating `raw/` and re-running compile per user intent.
+- **llm-kb-research-file** — Deep dives on a single follow-up question; health lint produces **many** shallow findings + a backlog.
 
 ## Quality bar
 
 - Prefer **actionable** findings over generic praise.
 - Separate **facts in repo** from **web-sourced** or **speculative** claims.
-- Keep the report scannable: tables and short bullets; long prose belongs in a separate exploration note (`outputs/qa/` via wiki-research-file).
+- Keep the report scannable: tables and short bullets; long prose belongs in a separate exploration note (`outputs/qa/` via llm-kb-research-file).

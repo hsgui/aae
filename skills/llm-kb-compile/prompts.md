@@ -1,4 +1,4 @@
-# Prompt Templates for wiki-compile
+# Prompt Templates for llm-kb-compile
 
 Reference prompts for each compilation phase. The agent should adapt these to actual file contents.
 
