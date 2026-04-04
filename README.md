@@ -242,6 +242,7 @@ await linkComponent('skills', 'my-skill', {
 
 - [vercel-labs/skills](https://github.com/vercel-labs/skills) — The open agent skills CLI and ecosystem that defined the `SKILL.md` specification. `aae` is compatible with repos that follow this format.
 - [mattpocock/skills](https://github.com/mattpocock/skills) — A curated collection of high-quality agent skills for planning, development, and tooling that helped inspire the direction of this project.
+- [geekjourneyx/md2wechat-skill](https://github.com/geekjourneyx/md2wechat-skill) — Markdown-to-WeChat Official Account tooling and the upstream `md2wechat` agent skill; the bundled `md2wechat-best-practices` skill is meant to pair with that workflow.
 
 ## License
 
