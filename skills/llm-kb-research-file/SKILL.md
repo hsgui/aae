@@ -67,6 +67,16 @@ sources:
 - **Marp**: keep decks self-contained under `outputs/slides/`; link the deck from the matching Q&A file (or vice versa).
 - **matplotlib** (or other generators): write image under `outputs/figures/`; reference it from Markdown with a **relative** path so Obsidian resolves it.
 
+## Multi-turn accumulation (non-negotiable)
+
+A single Q&A session often spans multiple user messages — the initial question, follow-up clarifications, deep-dives, corrections. **Every turn that produces substantive new content must be written back to the same output file**, not just answered in chat.
+
+- If a follow-up belongs to the **same topic** as an existing `outputs/qa/` file, **append** the new content to that file (e.g. add a new subsection, expand an existing section, or mark an uncertainty as resolved).
+- Only create a **new** Q&A file when the follow-up is clearly a **distinct topic** that deserves its own page.
+- Update `## Uncertainties / follow-ups` to reflect which open questions have been addressed and which new ones emerged.
+
+Rationale: chat messages are ephemeral and invisible to future sessions. If the insight isn't in the file, it doesn't exist.
+
 ## File-back (non-negotiable)
 
 Finishing the answer in chat is **not** enough. Before closing the task:
