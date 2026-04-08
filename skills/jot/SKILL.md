@@ -1,5 +1,5 @@
 ---
-name: append-note
+name: jot
 description: >
   Quick-capture note-taking using the Append-and-Review method (inspired by Karpathy).
   All notes are prepended to a single file ~/notes.md with minimal friction.
@@ -52,6 +52,33 @@ When the user provides something to note down:
 - No extra metadata beyond the timestamp. No "category:", no "tags:", no YAML blocks.
 - Keep it raw and fast.
 
+**CRITICAL — URL/Link handling:**
+- When the user provides a URL or link to save, record ONLY the URL itself with the appropriate prefix (e.g., `read: <URL>`, `link: <URL>`, `watch: <URL>`).
+- **NEVER fetch, visit, summarize, or expand the linked content.** The user wants to save a bookmark for later, not a summary now.
+- Do NOT use web_fetch, web_search, or any tool to retrieve the content behind the URL.
+- If the user explicitly asks "summarize this link" or "what's this about?", that is a separate request — NOT part of the note-taking action. Handle it only if explicitly asked.
+- A note with a URL should look like this and NOTHING more:
+  ```
+  ---
+  2026-04-08 12:39
+
+  read: https://example.com/some-article
+
+  ```
+- Wrong (DO NOT do this):
+  ```
+  ---
+  2026-04-08 12:39
+
+  read: MiniMax M2.7 — The first AI that improves without retraining
+  source: https://example.com/some-article
+  author: Someone
+
+  Key idea: ...
+  [multi-line summary]
+
+  ```
+
 **Recognized prefixes** (case-insensitive, user can invent new ones freely):
 - `watch:` — movies, shows, videos to watch
 - `listen:` — music, podcasts, audiobooks
@@ -100,5 +127,7 @@ When the user asks for note stats:
 - NEVER reorganize the file into sections, categories, or separate files unless the user explicitly asks.
 - NEVER add metadata beyond the timestamp line.
 - NEVER reformat the user's content unless fixing obvious typos they ask about.
+- **NEVER fetch or summarize URLs/links when adding them as notes.** The append action is a bookmark, not a research task. Just store the raw URL with its prefix tag.
+- **NEVER expand a single URL into multiple lines of content** (no author, no source, no key ideas, no summaries). One line: `prefix: URL`. Done.
 - The file is the user's stream of consciousness. Respect it.
 - If the file gets very large (1000+ entries), suggest a review session but don't force it.
