@@ -41,9 +41,13 @@ cmd_prepend() {
   ts="$(now)"
 
   # Build the entry lines (compact: no blank lines, NO leading ---)
+  # Prefix each content line with a checkbox for review tracking
+  local cb_content
+  cb_content="$(printf '%s' "$content" | sed 's/^/- [ ] /')"
+
   local entry
   entry="${ts}
-${content}"
+${cb_content}"
 
   # Read existing file, split off frontmatter (first 2 lines: ---\n---)
   local head body

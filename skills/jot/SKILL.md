@@ -51,8 +51,8 @@ When the user provides something to note down:
 - If the user says something like "记一下明天要看 XXX", convert naturally to: `watch: XXX`
 - Multi-line notes: pass as a single string with `\n` for newlines.
 - No extra metadata. No "category:", no "tags:", no YAML blocks.
-- All prefixes are treated equally — pure text, no checkboxes, no special formatting.
-- **NEVER add `- [ ]`, `- [x]`, or any Markdown checkbox syntax.** Not for `todo:`, not for `fix:`, not for anything. Every note is plain text only.
+- All prefixes are treated equally — pure text with checkbox for review tracking.
+- **Every note line is automatically prefixed with `- [ ]` (Markdown checkbox)** by the script. This enables review-mode checking. You do NOT need to add checkboxes manually — the script handles it.
 
 **CRITICAL — URL/Link handling:**
 - When the user provides a URL, record ONLY the URL with its prefix: `read: <URL>`, `link: <URL>`, `watch: <URL>`.
@@ -122,7 +122,7 @@ If the user invents a new prefix (e.g., `recipe:`, `dream:`), just use it. Don't
 ## Important Constraints
 
 - **ALL writes go through `jot.sh`**. Never manually format entries.
-- **NEVER use Markdown checkboxes** (`- [ ]`, `- [x]`). Not for todos, not for fixes, not for anything. Every note is plain text.
+- **Checkbox format is automatic**: The script adds `- [ ]` to every note. During review, users can mark items as `- [x]` to indicate completion.
 - NEVER reorganize the file into sections, categories, or separate files unless the user explicitly asks.
 - NEVER add metadata beyond the timestamp line.
 - NEVER reformat the user's content unless fixing obvious typos they ask about.
