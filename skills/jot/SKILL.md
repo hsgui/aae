@@ -22,10 +22,16 @@ A single-file, append-only note system. Friction is the enemy — capture fast, 
 - **Minimal metadata**: Just a timestamp separator. No templates, no frontmatter per note.
 - **Prefix tags are optional shortcuts**: `watch:`, `idea:`, `todo:`, etc. Use when natural, skip when not.
 - **Review is how notes stay alive**: Old stuff sinks. Good stuff gets pulled back up or merged.
+- **Format is enforced by script, not by LLM**: All write operations go through `jot.sh`. Never hand-format entries.
 
-## Note File Location
+## Script Location
 
-`~/notes.md` — create if it doesn't exist.
+All formatting is handled by the script at:
+```
+~/.workbuddy/skills/jot/scripts/jot.sh
+```
+
+**CRITICAL**: You MUST use this script for ALL write operations. NEVER manually construct note entries or edit `~/notes.md` with replace_in_file / write_to_file for appending notes. The script guarantees format consistency.
 
 ## Operations
 
@@ -33,58 +39,76 @@ A single-file, append-only note system. Friction is the enemy — capture fast, 
 
 When the user provides something to note down:
 
-1. Read the current contents of `~/notes.md` (or create it empty if missing).
-2. Build the new entry:
+1. Determine the content string. Apply prefix tag rules (see below).
+2. Run the script:
+   ```bash
+   ~/.workbuddy/skills/jot/scripts/jot.sh prepend "read: https://example.com"
    ```
-   ---
-   YYYY-MM-DD HH:MM
+3. Confirm to the user that the note was added.
 
-   [content]
-
-   ```
-3. Prepend the new entry to the top of the file (above all existing content).
-4. Write back to `~/notes.md`.
-
-**Content formatting rules:**
+**Content rules (what YOU decide before calling the script):**
 - If the user's input starts with a recognized prefix (`watch:`, `idea:`, `todo:`, etc.), keep it as-is.
 - If the user says something like "记一下明天要看 XXX", convert naturally to: `watch: XXX`
-- Multi-line notes are fine. Preserve the user's formatting.
-- No extra metadata beyond the timestamp. No "category:", no "tags:", no YAML blocks.
-- Keep it raw and fast.
+- Multi-line notes: pass as a single string with `\n` for newlines.
+- No extra metadata. No "category:", no "tags:", no YAML blocks.
+- All prefixes are treated equally — pure text, no checkboxes, no special formatting.
+- **NEVER add `- [ ]`, `- [x]`, or any Markdown checkbox syntax.** Not for `todo:`, not for `fix:`, not for anything. Every note is plain text only.
 
 **CRITICAL — URL/Link handling:**
-- When the user provides a URL or link to save, record ONLY the URL itself with the appropriate prefix (e.g., `read: <URL>`, `link: <URL>`, `watch: <URL>`).
-- **NEVER fetch, visit, summarize, or expand the linked content.** The user wants to save a bookmark for later, not a summary now.
-- Do NOT use web_fetch, web_search, or any tool to retrieve the content behind the URL.
-- If the user explicitly asks "summarize this link" or "what's this about?", that is a separate request — NOT part of the note-taking action. Handle it only if explicitly asked.
-- A note with a URL should look like this and NOTHING more:
-  ```
-  ---
-  2026-04-08 12:39
+- When the user provides a URL, record ONLY the URL with its prefix: `read: <URL>`, `link: <URL>`, `watch: <URL>`.
+- **NEVER fetch, visit, summarize, or expand the linked content.**
+- **NEVER expand a single URL into multiple lines** (no author, no source, no key ideas).
+- If the user explicitly asks "summarize this link", that is a SEPARATE request.
 
-  read: https://example.com/some-article
+### 2. Review Notes
 
-  ```
-- Wrong (DO NOT do this):
-  ```
-  ---
-  2026-04-08 12:39
+When the user asks to review or look at their notes:
 
-  read: MiniMax M2.7 — The first AI that improves without retraining
-  source: https://example.com/some-article
-  author: Someone
+1. Read `~/notes.md` directly (read_file is fine for reading).
+2. Present a summary: total entries, recent entries (last 5-10), and a sense of what's in there.
+3. Ask what the user wants to do:
+   - **Resurface**: Copy important old notes back to the top with today's date.
+   - **Merge**: Combine related entries into one consolidated note.
+   - **Prune**: Remove entries that are no longer relevant.
+   - **Just browse**: Show more entries if requested.
 
-  Key idea: ...
-  [multi-line summary]
+For resurfacing/merging, use the script to prepend new consolidated entries, then manually remove old ones.
 
-  ```
+### 3. Search Notes
 
-**Recognized prefixes** (case-insensitive, user can invent new ones freely):
-- `watch:` — movies, shows, videos to watch
+```bash
+~/.workbuddy/skills/jot/scripts/jot.sh search "keyword"
+```
+
+Prints all entries containing the keyword.
+
+### 4. Quick Stats
+
+```bash
+~/.workbuddy/skills/jot/scripts/jot.sh stats
+```
+
+Shows total entries and entries by prefix.
+
+### 5. Initialize File
+
+If `~/notes.md` doesn't exist:
+
+```bash
+~/.workbuddy/skills/jot/scripts/jot.sh init
+```
+
+Creates the file with Obsidian-compatible frontmatter (`---\n---`).
+
+## Recognized Prefixes
+
+Case-insensitive. User can invent new ones freely:
+- `watch:` — movies, shows, videos
 - `listen:` — music, podcasts, audiobooks
 - `read:` — articles, books, papers
 - `idea:` — thoughts, inspirations
 - `todo:` — action items
+- `fix:` — bugs to fix
 - `quote:` — memorable quotes
 - `link:` — URLs worth saving
 - `learn:` — topics to study
@@ -95,39 +119,13 @@ When the user provides something to note down:
 
 If the user invents a new prefix (e.g., `recipe:`, `dream:`), just use it. Don't gatekeep.
 
-### 2. Review Notes
-
-When the user asks to review or look at their notes:
-
-1. Read `~/notes.md`.
-2. Present a summary: total entries, recent entries (last 5-10), and a sense of what's in there.
-3. Ask what the user wants to do:
-   - **Resurface**: Copy important old notes back to the top with today's date.
-   - **Merge**: Combine related entries into one consolidated note.
-   - **Prune**: Remove entries that are no longer relevant.
-   - **Just browse**: Show more entries if requested.
-
-### 3. Search Notes
-
-When the user searches for something in their notes:
-
-1. Read `~/notes.md`.
-2. Search by keyword, prefix tag, or date range.
-3. Present matching entries with their timestamps.
-
-### 4. Quick Stats
-
-When the user asks for note stats:
-
-1. Count total entries, entries per prefix tag, date range.
-2. Show a brief summary.
-
 ## Important Constraints
 
+- **ALL writes go through `jot.sh`**. Never manually format entries.
+- **NEVER use Markdown checkboxes** (`- [ ]`, `- [x]`). Not for todos, not for fixes, not for anything. Every note is plain text.
 - NEVER reorganize the file into sections, categories, or separate files unless the user explicitly asks.
 - NEVER add metadata beyond the timestamp line.
 - NEVER reformat the user's content unless fixing obvious typos they ask about.
-- **NEVER fetch or summarize URLs/links when adding them as notes.** The append action is a bookmark, not a research task. Just store the raw URL with its prefix tag.
-- **NEVER expand a single URL into multiple lines of content** (no author, no source, no key ideas, no summaries). One line: `prefix: URL`. Done.
+- NEVER fetch or summarize URLs/links when adding them as notes.
 - The file is the user's stream of consciousness. Respect it.
 - If the file gets very large (1000+ entries), suggest a review session but don't force it.
