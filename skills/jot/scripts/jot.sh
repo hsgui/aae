@@ -65,7 +65,9 @@ ${cb_content}"
       printf '%s\n' "$body"
     fi
   } > "${NOTES_FILE}.tmp"
-  mv "${NOTES_FILE}.tmp" "$NOTES_FILE"
+  # Use cat+rm instead of mv to preserve symlinks
+  cat "${NOTES_FILE}.tmp" > "$NOTES_FILE"
+  rm -f "${NOTES_FILE}.tmp"
 
   echo "[jot] Note added." >&2
 }
