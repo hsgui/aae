@@ -59,6 +59,8 @@ When the user provides something to note down:
 - **NEVER fetch, visit, summarize, or expand the linked content.**
 - **NEVER expand a single URL into multiple lines** (no author, no source, no key ideas).
 - If the user explicitly asks "summarize this link", that is a SEPARATE request.
+- **When user asks to jot a link WITH a summary**: use `web_fetch` to grab the original content. **NEVER use `web_search`** — the user gave you the exact URL, go read it directly.
+- If `web_fetch` fails (e.g., Twitter/X pages requiring JS rendering), record the link as-is without a summary. Do NOT fall back to web_search.
 
 ### 2. Review Notes
 
