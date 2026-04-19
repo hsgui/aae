@@ -130,6 +130,18 @@ For every wiki file just written, scan all other wiki files and add/update a `##
 - Keep every file under ~500 words unless the concept is genuinely complex.
 - If a raw file has no extractable concepts, still write a summary and skip concept extraction for it.
 
+### Wikilink canonical form (hard rule)
+
+- **Concept links in summaries' `## Related concepts` MUST use the full path `[[concepts/<ConceptName>]]`**, never the short form `[[<ConceptName>]]`. Same for summary-to-summary links (`[[summaries/...]]`).
+- `## See also` and `## Sources` sections in concepts follow the same rule for their targets.
+- Rationale: Obsidian resolves short links by first-match heuristics; full paths keep cross-repo linting deterministic and avoid regressions when files are renamed.
+
+### `updated` field semantics (hard rule)
+
+- Refresh `updated: <today>` **iff the file's content area changes**—specifically: Key ideas / Core ideas / Sources / See also / Related concepts / body prose. 
+- **Do NOT bump `updated` for Backlinks-only changes** (Phase 4 backlink pass). Backlinks are derived metadata and would otherwise flood every compile with noise, defeating the field's purpose as a "last meaningful edit" marker.
+- index.md's `updated` always reflects the current compile date.
+
 ---
 
 ## Additional reference
