@@ -40,10 +40,19 @@ cmd_prepend() {
   local ts
   ts="$(now)"
 
-  # Build the entry lines (compact: no blank lines, NO leading ---)
-  # Prefix each content line with a checkbox for review tracking
+  # Build the entry lines. One note = one checkbox.
+  # - First line:       prefix `- [ ] `  (the list item itself)
+  # - Blank lines:      left empty        (paragraph break inside the item)
+  # - Other lines:      indent 6 spaces   (continuation of the list item,
+  #                                        aligned with text after `- [ ] `)
+  # This makes the whole multi-line entry render as a SINGLE checkbox item
+  # in Markdown/Obsidian, with nested sub-bullets rendering correctly.
   local cb_content
-  cb_content="$(printf '%s' "$content" | sed 's/^/- [ ] /')"
+  cb_content="$(printf '%s' "$content" | awk '
+    NR == 1 { print "- [ ] " $0; next }
+    /^$/    { print ""; next }
+              { print "      " $0 }
+  ')"
 
   local entry
   entry="${ts}

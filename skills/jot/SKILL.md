@@ -52,7 +52,25 @@ When the user provides something to note down:
 - Multi-line notes: pass as a single string with `\n` for newlines.
 - No extra metadata. No "category:", no "tags:", no YAML blocks.
 - All prefixes are treated equally — pure text with checkbox for review tracking.
-- **Every note line is automatically prefixed with `- [ ]` (Markdown checkbox)** by the script. This enables review-mode checking. You do NOT need to add checkboxes manually — the script handles it.
+- **One note = one checkbox.** The script adds `- [ ]` to the FIRST line only and indents continuation lines with 6 spaces so the whole entry renders as a single Markdown list item. You do NOT add checkboxes manually.
+- **Do NOT pre-indent continuation lines yourself.** Pass the content in natural form (e.g. `first line\n\nsub bullet\n- item 1\n- item 2`). The script handles the 6-space indent. If you pre-indent, you'll get double indentation.
+
+**Multi-line formatting guidance:**
+When a note naturally has multiple lines (e.g. a link + summary), structure it like this before passing to the script:
+
+```
+link: <TITLE> — <one-line description> <URL>
+
+<optional context paragraph>
+- <bullet 1>
+- <bullet 2>
+- <bullet 3>
+```
+
+- First line is the headline (what the entry is about). Keep it self-contained.
+- Blank line separates headline from body. The script preserves blank lines as paragraph breaks within the list item.
+- Sub-bullets use plain `- ` — they will render nested inside the parent checkbox.
+- Keep it tight — 3-6 bullets max. A jot is not an article.
 
 **CRITICAL — URL/Link handling:**
 - When the user provides a URL, record ONLY the URL with its prefix: `read: <URL>`, `link: <URL>`, `watch: <URL>`.
@@ -124,7 +142,7 @@ If the user invents a new prefix (e.g., `recipe:`, `dream:`), just use it. Don't
 ## Important Constraints
 
 - **ALL writes go through `jot.sh`**. Never manually format entries.
-- **Checkbox format is automatic**: The script adds `- [ ]` to every note. During review, users can mark items as `- [x]` to indicate completion.
+- **Checkbox format is automatic**: The script adds `- [ ]` to the first line of each note and indents continuation lines so the entry is one checkbox item. During review, users mark items as `- [x]` to indicate completion. Never add checkboxes yourself; never indent continuation lines yourself.
 - NEVER reorganize the file into sections, categories, or separate files unless the user explicitly asks.
 - NEVER add metadata beyond the timestamp line.
 - NEVER reformat the user's content unless fixing obvious typos they ask about.
