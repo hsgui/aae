@@ -17,8 +17,40 @@ now() {
 
 ensure_file() {
   if [[ ! -f "$NOTES_FILE" ]]; then
-    printf -- '---\n---\n' > "$NOTES_FILE"
+    echo "---" > "$NOTES_FILE"
+    echo "---" >> "$NOTES_FILE"
     echo "[jot] Created $NOTES_FILE" >&2
+  fi
+}
+
+# Extract the body (everything after frontmatter) from notes.md.
+# Handles several corruption scenarios gracefully:
+#   1. Normal:   line1=---, line2=---          → body = from line 3
+#   2. Corrupted frontmatter: line1=---, line2≠--- → find 2nd occurrence of ^---$, body = after that
+#   3. No frontmatter at all: line1≠---         → entire file becomes body (we'll prepend fresh frontmatter)
+#   4. Extra blank lines after frontmatter       → strip leading whitespace before returning
+extract_body() {
+  local first_line second_line
+  first_line="$(head -n 1 "$NOTES_FILE")"
+  second_line="$(sed -n '2p' "$NOTES_FILE")"
+
+  if [[ "$first_line" == "---" && "$second_line" == "---" ]]; then
+    # ✅ Standard frontmatter: body starts at line 3
+    tail -n +3 "$NOTES_FILE"
+  elif [[ "$first_line" == "---" ]]; then
+    # ⚠️ Corrupted frontmatter: line 1 is --- but line 2 isn't
+    # Find the line number of the 2nd ^---$ line (the real frontmatter closer)
+    local fm_end
+    fm_end="$(grep -n '^---$' "$NOTES_FILE" | sed -n '2p' | cut -d: -f1)" || true
+    if [[ -n "$fm_end" && "$fm_end" -ge 2 ]]; then
+      tail -n +"$((fm_end + 1))" "$NOTES_FILE"
+    else
+      # Can't find closing ---, treat everything after line 1 as body
+      tail -n +2 "$NOTES_FILE"
+    fi
+  else
+    # ⚠️ No frontmatter at all — return entire file as body
+    cat "$NOTES_FILE"
   fi
 }
 
@@ -28,7 +60,8 @@ cmd_init() {
   if [[ -f "$NOTES_FILE" ]]; then
     echo "[jot] $NOTES_FILE already exists, skipping init." >&2
   else
-    printf -- '---\n---\n' > "$NOTES_FILE"
+    echo "---" > "$NOTES_FILE"
+    echo "---" >> "$NOTES_FILE"
     echo "[jot] Created $NOTES_FILE" >&2
   fi
 }
@@ -58,19 +91,22 @@ cmd_prepend() {
   entry="${ts}
 ${cb_content}"
 
-  # Read existing file, split off frontmatter (first 2 lines: ---\n---)
-  local head body
-  head="$(head -n 2 "$NOTES_FILE")"
-  body="$(tail -n +3 "$NOTES_FILE")"
+  # ── Robust reassembly: always write a clean frontmatter ──
+  # Never blindly copy the first 2 lines — always emit ---\n--- explicitly.
+  # This self-heals from any prior frontmatter corruption.
+  local body
+  body="$(extract_body)"
 
-  # Reassemble: frontmatter + new entry + --- separator + existing body
-  # The frontmatter's closing --- acts as the separator before the first entry.
-  # Between entries we insert an explicit --- separator.
   {
-    printf '%s\n' "$head"
+    # Always write pristine frontmatter (self-heals from any prior corruption)
+    echo "---"
+    echo "---"
+    # New entry, then separator + existing body (if any).
+    # No blank line around `---` — matches the file's existing compact style.
+    # Use `printf '%s\n'` for body so the file ends with a proper newline.
     printf '%s\n' "$entry"
     if [[ -n "$body" ]]; then
-      printf '%s\n' "---"
+      echo "---"
       printf '%s\n' "$body"
     fi
   } > "${NOTES_FILE}.tmp"
