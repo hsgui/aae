@@ -9,6 +9,11 @@ description: >
   content with a recognized prefix tag (watch:, listen:, read:, idea:, todo:, quote:, link:,
   learn:, buy:, meeting:, person:, reflect:). Also use when the user asks to review, search,
   or clean up their notes.
+allowed-tools:
+  - Bash
+  - Read
+  - Grep
+  - Glob
 ---
 
 # Append-and-Review Note
