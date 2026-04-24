@@ -2,7 +2,8 @@
 name: jot
 description: >
   Quick-capture note-taking using the Append-and-Review method (inspired by Karpathy).
-  All notes are prepended to a single file ~/notes.md with minimal friction.
+  All notes are prepended to a single notes file (default `~/notes.md`, configurable
+  via `JOT_NOTES_FILE` env var or `~/.workbuddy/config/jot.conf`) with minimal friction.
   Use when the user wants to jot down a thought, idea, recommendation, todo, quote, link,
   or any snippet worth remembering. Trigger on phrases like "note", "jot down", "记一下",
   "remember this", "add to notes", "append note", "笔记", "记录", or when the user provides
@@ -22,7 +23,7 @@ A single-file, append-only note system. Friction is the enemy — capture fast, 
 
 ## Philosophy
 
-- **One file**: `~/notes.md`. Everything goes here.
+- **One file**: A single notes file. Everything goes here. The path is resolved by the script — run `jot.sh path` to see the current file. Default is `~/notes.md`, but it can be overridden via `$JOT_NOTES_FILE` or `~/.workbuddy/config/jot.conf`.
 - **Prepend, don't append**: New notes go to the TOP. The file is reverse-chronological.
 - **Minimal metadata**: Just a timestamp separator. No templates, no frontmatter per note.
 - **Prefix tags are optional shortcuts**: `watch:`, `idea:`, `todo:`, etc. Use when natural, skip when not.
@@ -36,7 +37,22 @@ All formatting is handled by the script at:
 ~/.workbuddy/skills/jot/scripts/jot.sh
 ```
 
-**CRITICAL**: You MUST use this script for ALL write operations. NEVER manually construct note entries or edit `~/notes.md` with replace_in_file / write_to_file for appending notes. The script guarantees format consistency.
+**CRITICAL**: You MUST use this script for ALL write operations. NEVER manually construct note entries or edit the notes file with replace_in_file / write_to_file for appending notes. The script guarantees format consistency. To find the notes file path, always call `jot.sh path` — never hard-code `~/notes.md`.
+
+## Notes File Location
+
+The notes file path is resolved by `jot.sh` in this order (first hit wins):
+
+1. `$JOT_NOTES_FILE` environment variable
+2. `~/.workbuddy/config/jot.conf` — a local shell-sourced file defining `JOT_NOTES_FILE=...` (lives outside the skills dir so it's never tracked in git)
+3. `$HOME/notes.md` (default)
+
+To check the currently-resolved path:
+```bash
+~/.workbuddy/skills/jot/scripts/jot.sh path
+```
+
+**Always call `jot.sh path` before reading the notes file.** Don't assume it's at `~/notes.md` — on some machines it's on iCloud/OneDrive or another cloud-synced path.
 
 ## Operations
 
@@ -89,9 +105,10 @@ link: <TITLE> — <one-line description> <URL>
 
 When the user asks to review or look at their notes:
 
-1. Read `~/notes.md` directly (read_file is fine for reading).
-2. Present a summary: total entries, recent entries (last 5-10), and a sense of what's in there.
-3. Ask what the user wants to do:
+1. First resolve the notes file path: `NOTES_FILE=$(~/.workbuddy/skills/jot/scripts/jot.sh path)`. Never assume `~/notes.md` — the path may be overridden per machine.
+2. Read that file (read_file is fine for reading). Do NOT edit it directly — all writes go through `jot.sh prepend`.
+3. Present a summary: total entries, recent entries (last 5-10), and a sense of what's in there. You can also run `jot.sh stats` for a quick overview.
+4. Ask what the user wants to do:
    - **Resurface**: Copy important old notes back to the top with today's date.
    - **Merge**: Combine related entries into one consolidated note.
    - **Prune**: Remove entries that are no longer relevant.
@@ -117,7 +134,7 @@ Shows total entries and entries by prefix.
 
 ### 5. Initialize File
 
-If `~/notes.md` doesn't exist:
+If the notes file doesn't exist:
 
 ```bash
 ~/.workbuddy/skills/jot/scripts/jot.sh init

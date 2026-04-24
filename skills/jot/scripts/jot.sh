@@ -2,12 +2,29 @@
 # jot.sh — deterministic note formatting for the jot skill
 # Usage:
 #   jot.sh prepend "content"  — prepend a note with timestamp
-#   jot.sh init               — create ~/notes.md with frontmatter
+#   jot.sh init               — create notes file with frontmatter
 #   jot.sh search "keyword"   — search notes (prints matching entries)
 #   jot.sh stats              — show quick stats
+#   jot.sh path               — print resolved notes file path
+#
+# Notes file resolution order (first hit wins):
+#   1. $JOT_NOTES_FILE environment variable
+#   2. ~/.workbuddy/config/jot.conf (local, not in git) — defines JOT_NOTES_FILE=...
+#   3. $HOME/notes.md (default)
 set -euo pipefail
 
-NOTES_FILE="$HOME/notes.md"
+# Load local config if present. Keeps per-machine overrides outside git,
+# and works even when the parent shell doesn't export env vars (e.g. GUI-launched
+# bash subprocesses that skip ~/.zshrc).
+# NOTE: this path is intentionally OUTSIDE ~/.workbuddy/skills/ because that
+# directory is often a symlink into a git-tracked repo.
+JOT_CONFIG_FILE="$HOME/.workbuddy/config/jot.conf"
+if [[ -z "${JOT_NOTES_FILE:-}" && -f "$JOT_CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$JOT_CONFIG_FILE"
+fi
+
+NOTES_FILE="${JOT_NOTES_FILE:-$HOME/notes.md}"
 
 # ── helpers ──────────────────────────────────────────────────────────
 
@@ -141,30 +158,43 @@ cmd_search() {
 cmd_stats() {
   ensure_file
 
+  # Count notes by timestamp lines (format: YYYY-MM-DD HH:MM).
+  # This avoids the off-by-one caused by frontmatter's paired `---` and
+  # the `---` separators between entries.
   local total
-  total=$(grep -c '^---$' "$NOTES_FILE" 2>/dev/null || echo 0)
-  # Subtract 1 for the frontmatter closing ---
-  total=$((total > 1 ? total - 1 : 0))
+  total=$(grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}$' "$NOTES_FILE" 2>/dev/null || echo 0)
 
-  # Count by prefix tags
   echo "=== jot stats ==="
+  echo "File:           $NOTES_FILE"
   echo "Total entries:  $total"
   echo ""
   echo "Entries by prefix:"
-  # Extract first word ending with : from content lines (skip --- and date lines)
-  tail -n +3 "$NOTES_FILE" | grep -v '^---$' | grep -v '^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}' | \
-    grep -oE '^[a-z]+:' | sort | uniq -c | sort -rn || true
+  # Each entry's first content line looks like:   - [ ] prefix: ...
+  # or                                            - [x] prefix: ...
+  # grep -oE captures:  "- [ ] prefix:"  → 4 whitespace-separated tokens
+  # We want the 4th token (the prefix with colon).
+  grep -oE '^- \[[ x]\] [a-zA-Z]+:' "$NOTES_FILE" \
+    | awk '{print $4}' \
+    | sort | uniq -c | sort -rn || true
 }
 
 # ── main dispatch ────────────────────────────────────────────────────
+
+cmd_path() {
+  # Print the resolved notes file path. Does NOT create the file.
+  # Useful for AI/scripts that need to read the file without re-implementing
+  # the JOT_NOTES_FILE / config / default resolution.
+  echo "$NOTES_FILE"
+}
 
 case "${1:-}" in
   init)    cmd_init ;;
   prepend) shift; cmd_prepend "$@" ;;
   search)  shift; cmd_search "$@" ;;
   stats)   cmd_stats ;;
+  path)    cmd_path ;;
   *)
-    echo "Usage: jot.sh {init|prepend|search|stats} [args...]" >&2
+    echo "Usage: jot.sh {init|prepend|search|stats|path} [args...]" >&2
     exit 1
     ;;
 esac
