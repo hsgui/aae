@@ -1,6 +1,6 @@
 {
   "name": "@hsgui/aae",
-  "version": "0.10.12",
+  "version": "0.10.13",
   "description": "AI Agent Engineering — Install and manage skills, agents, hooks, and workflows for AI coding assistants.",
   "type": "module",
   "bin": {
