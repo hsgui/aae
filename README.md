@@ -142,17 +142,59 @@ npx @hsgui/aae add hsgui/aae/skills/llm-kb-research-file --project your-llm-kb -
 
 With `aae` installed globally, the same paths work as `aae add hsgui/aae/skills/llm-kb-compile ...`. See [Project-local symlinks](#project-local-symlinks) for `--project` / `--target` behavior.
 
+## WorkBuddy Integration
+
+[WorkBuddy](https://www.codebuddy.cn/) loads user-level skills from `~/.workbuddy/skills/<name>/`, which isn't one of the platforms that the `aae` CLI auto-detects. A bundled helper script, `install-skills.sh`, symlinks **each skill individually** from this repo into `~/.workbuddy/skills/` so you can keep editing skills in-repo (and have changes take effect immediately) while still installing third-party WorkBuddy skills side-by-side without polluting this repo.
+
+```bash
+# From the repo root (idempotent — safe to re-run after adding skills):
+./install-skills.sh
+```
+
+The script:
+
+- Symlinks **each skill directory** from `skills/<name>/` into `~/.workbuddy/skills/<name>/` (one symlink per skill, not a single top-level symlink).
+- **Protects third-party skills**: if `~/.workbuddy/skills/<name>/` already exists as a real directory (installed through WorkBuddy itself), it's left untouched with a `SKIP` warning.
+- **Auto-migrates** a legacy whole-directory symlink at `~/.workbuddy/skills` → flat per-skill symlinks.
+- Is path-independent: it resolves the repo root from `$BASH_SOURCE`, so `git clone` anywhere and run it — no hard-coded paths.
+
+Typical workflow:
+
+```bash
+# Add a new skill to the repo
+cd /path/to/aae
+# ...author skills/my-new-skill/SKILL.md...
+./install-skills.sh             # link it into WorkBuddy
+git add skills/my-new-skill && git commit -m "add my-new-skill"
+
+# On a fresh machine
+git clone <this repo> ~/repos/aae
+cd ~/repos/aae && ./install-skills.sh
+```
+
+Edits in `skills/<name>/` are visible to WorkBuddy immediately (symlinks are live). Conversely, when WorkBuddy edits one of these skills, changes land directly in this git repo — `git status` shows them ready to commit.
+
+### Per-skill local config
+
+Some skills read a local, **non-git** config file to customize behavior per machine. Keep these **outside** `~/.workbuddy/skills/` (which contains symlinks into this repo) — the convention is:
+
+```
+~/.workbuddy/config/<skill-name>.conf
+```
+
+Example: the `jot` skill reads `~/.workbuddy/config/jot.conf` for a `JOT_NOTES_FILE=...` override. See `skills/jot/SKILL.md` for details.
+
 ## Platform Mapping
 
 Components are symlinked to the right location based on platform:
 
-| Type       | Cursor (`~/.cursor/`)    | Claude Code (`~/.claude/`) |
-|------------|--------------------------|----------------------------|
-| skills     | `skills/<name>/`         | `skills/<name>/`           |
-| commands   | —                        | `commands/<name>/`         |
-| agents     | `agents/<name>/`         | `agents/<name>/`           |
-| hooks      | `hooks/<name>/`          | `hooks/<name>/`            |
-| workflows  | `workflows/<name>/`      | `commands/<name>/`         |
+| Type       | Cursor (`~/.cursor/`)    | Claude Code (`~/.claude/`) | WorkBuddy (`~/.workbuddy/`) |
+|------------|--------------------------|----------------------------|-----------------------------|
+| skills     | `skills/<name>/`         | `skills/<name>/`           | `skills/<name>/` (via `install-skills.sh`) |
+| commands   | —                        | `commands/<name>/`         | —                           |
+| agents     | `agents/<name>/`         | `agents/<name>/`           | —                           |
+| hooks      | `hooks/<name>/`          | `hooks/<name>/`            | —                           |
+| workflows  | `workflows/<name>/`      | `commands/<name>/`         | —                           |
 
 ## Storage
 
